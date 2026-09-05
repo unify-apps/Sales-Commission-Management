@@ -30,6 +30,13 @@ export default function Profiles() {
     `${p.personName} ${p.employeeId} ${p.title} ${p.region}`.toLowerCase().includes(search.toLowerCase()),
   )
 
+  // While a search is active the header shows the filtered count against the total,
+  // so a short list reads as "narrowed" rather than as "this is everyone".
+  const isFiltered = search.trim().length > 0
+  const countLabel = isFiltered
+    ? `${filtered.length} of ${profiles.length} profiles`
+    : `${profiles.length} ${profiles.length === 1 ? 'profile' : 'profiles'}`
+
   const columns: Column<Profile>[] = [
     {
       key: 'person',
@@ -66,7 +73,7 @@ export default function Profiles() {
         eyebrow="Organization"
         title="Profiles"
         subtitle="A period-aware view of every payee — person, position, user account, and hierarchy combined in one record."
-        meta={`${filtered.length} profiles`}
+        meta={countLabel}
       />
       <ListToolbar
         searchValue={search}
