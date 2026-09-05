@@ -43,7 +43,7 @@ export default function Positions() {
       key: 'name',
       header: 'Position',
       width: '26%',
-      cell: (p) => <RecordName name={p.positionCode} sub={p.positionName} />,
+      cell: (p) => <RecordName name={p.positionCode} sub={p.name} />,
     },
     {
       key: 'person',
@@ -60,7 +60,7 @@ export default function Positions() {
     {
       key: 'employeeId',
       header: 'Employee ID',
-      cell: (p) => <span className="font-mono text-[13px] text-muted-foreground">{p.employeeId ?? '—'}</span>,
+      cell: (p) => <span className="font-mono text-[13px] text-muted-foreground">{p.employeeId || '—'}</span>,
     },
     {
       key: 'occupancy',
@@ -133,24 +133,31 @@ export default function Positions() {
                 <SheetTitle className="font-heading text-2xl font-normal">{selected.positionCode}</SheetTitle>
               </SheetHeader>
               <div className="space-y-8 px-6 py-6">
+                {/* `ICM | List Positions` does not return effective dates or allocation —
+                    those come from `ICM | Resolve Position Occupant`, which is deployed but
+                    not wired here yet. Rendering them from this row printed a fixed "—" and
+                    "End of Time" that looked like an answer, so the fields are gone until
+                    the callable that actually knows them is attached. */}
                 <DetailSection title="Version Info" icon={<Clock className="size-4" />}>
-                  <DetailField label="Effective Start Date" value={selected.effectiveStart ? formatDate(selected.effectiveStart) : '—'} />
-                  <DetailField label="Effective End Date" value={selected.effectiveEnd ? formatDate(selected.effectiveEnd) : 'End of Time'} />
                   <DetailField label="As Of Date" value={formatDate(asOfDate)} />
+                  <DetailField
+                    label="Assignments Covering This Date"
+                    value={String(selected.matchCount)}
+                  />
                 </DetailSection>
                 <DetailSection title="Position Info" icon={<Briefcase className="size-4" />}>
                   <DetailField label="Position Code" value={selected.positionCode} />
-                  <DetailField label="Position Name" value={selected.positionName} />
+                  <DetailField label="Position Name" value={selected.name} />
                   <DetailField
                     label="Occupancy"
                     value={<Badge variant={OCCUPANCY_VARIANT[selected.occupancy]}>{selected.occupancy}</Badge>}
                   />
                   <DetailField
                     label="Payee Name"
-                    value={selected.payeeName ?? <span className="text-muted-foreground">{selected.occupancy === 'OCCUPIED' ? 'Unnamed payee' : '—'}</span>}
+                    value={selected.payeeName || <span className="text-muted-foreground">{selected.occupancy === 'OCCUPIED' ? 'Unnamed payee' : '—'}</span>}
                   />
-                  <DetailField label="Employee ID" value={selected.employeeId ?? '—'} />
-                  <DetailField label="Allocation %" value={selected.allocationPct != null ? `${selected.allocationPct}%` : '—'} />
+                  <DetailField label="Employee ID" value={selected.employeeId || '—'} />
+                  <DetailField label="Active" value={selected.active ? 'Yes' : 'No'} />
                 </DetailSection>
               </div>
               <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-card px-6 py-3">

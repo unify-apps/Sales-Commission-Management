@@ -30,7 +30,6 @@ import SimulatorHub from '@/routes/simulator/SimulatorHub'
 import RepIncentives from '@/routes/rep/RepIncentives'
 import RepPerformance from '@/routes/rep/RepPerformance'
 import RepSimulator from '@/routes/rep/RepSimulator'
-import LivePositions from '@/routes/org/LivePositions'
 
 // BrowserRouter (clean URLs, no #). The mount path is never hardcoded here — the engine
 // bakes it in as Vite's `base` (VITE_APP_BASE, see vite.config.ts) and the app reads it
@@ -57,7 +56,6 @@ export default function App() {
         <Route path="/organization/titles" element={<AppShell><Titles /></AppShell>} />
         <Route path="/organization/people" element={<AppShell><People /></AppShell>} />
         <Route path="/organization/positions" element={<AppShell><Positions /></AppShell>} />
-        <Route path="/organization/positions-live" element={<AppShell><LivePositions /></AppShell>} />
         <Route path="/organization/hierarchy" element={<AppShell><Hierarchy /></AppShell>} />
         <Route path="/organization/named-relationships" element={<AppShell><NamedRelationships /></AppShell>} />
         <Route path="/plan" element={<Navigate to="/plan/plans" replace />} />
