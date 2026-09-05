@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useExecuteWorkflowNode } from '@unifyapps/app-builder-sdk/hooks/workflow'
 
 import { FETCH, andFilter, extractPage, pageInput, type LeafFilter } from '@/data/bindings'
+import { internals, type CallableBinding } from '@/data/callables'
 
 export type BindingKind = 'seed' | 'storage' | 'callable'
 
@@ -15,6 +16,18 @@ export interface UseDataResult<T> {
 }
 
 const NOOP = () => {}
+
+/** Config for `kind: 'callable'` — an automation run through its dataSource. */
+export interface CallableRun {
+  /** the entry from `@/data/callables` that authorizes this call */
+  binding: CallableBinding
+  /** automation inputs; only keys in `binding.overridable` are accepted */
+  parameters?: Record<string, string>
+  /** where the rows sit in the automation's output, e.g. 'positions' */
+  recordsPath?: string
+  /** hold the call until its inputs are ready */
+  enabled?: boolean
+}
 
 /** Config for `kind: 'storage'` — records read from a backend object. */
 export interface StorageBinding {
@@ -39,13 +52,20 @@ export interface StorageBinding {
 //
 // For 'seed', the third argument IS the data — returned as-is, no fetch.
 // For 'storage', the read executes the app's FETCH dataSource binding (see
-// `@/data/bindings`, written by provision_data_sources). 'callable' is still a
-// declaration only.
+// `@/data/bindings`, written by provision_data_sources).
+// For 'callable', it runs an AUTOMATION through the dataSource that authorizes it
+// (see `@/data/callables`) — a different mechanism from 'storage', which reads
+// objects. Both go through this function so both appear in the Data panel.
 export function useData<T>(id: string, kind: 'seed', seed: T): UseDataResult<T>
 export function useData<T>(
   id: string,
   kind: 'storage',
   config: StorageBinding,
+): UseDataResult<T>
+export function useData<T>(
+  id: string,
+  kind: 'callable',
+  config: CallableRun,
 ): UseDataResult<T>
 export function useData<T>(id: string, kind: BindingKind, config: unknown): UseDataResult<T>
 export function useData<T>(
@@ -59,7 +79,54 @@ export function useData<T>(
   if (kind === 'storage') {
     return useStorage<T>(config as StorageBinding)
   }
+  if (kind === 'callable') {
+    return useCallable<T>(config as CallableRun)
+  }
   return { data: undefined, loading: false, error: undefined, refetch: NOOP }
+}
+
+// An automation call. The inputs are the shape the platform's
+// `validateDataSourceContextAndInputs` compares against the stored e_data_source row:
+// the same `automationId` and `synchronous` it holds, with `parameters` filling in the
+// `{{ }}` templates. Sending keys the row does not carry is refused, which is why the
+// three below are all there is.
+function useCallable<T>(config: CallableRun): UseDataResult<T> {
+  const binding = config?.binding
+  const enabled = Boolean(binding?.id) && config?.enabled !== false
+
+  const inputs = useMemo(
+    () => ({
+      automationId: binding?.automationId,
+      synchronous: true,
+      parameters: { ...internals(), ...(config?.parameters ?? {}) },
+    }),
+    [binding?.automationId, config?.parameters],
+  )
+
+  const query = useExecuteWorkflowNode(
+    { id: binding?.id, context: binding?.context, inputs },
+    { query: { enabled } },
+  )
+
+  // The automation's own output IS `data.response` — status, totals and rows together.
+  const response = (query.data as { response?: Record<string, unknown> } | undefined)
+    ?.response
+
+  const rows = useMemo(() => {
+    if (!response) return undefined
+    if (!config?.recordsPath) return response as T
+    const at = response[config.recordsPath]
+    return (Array.isArray(at) ? at : []) as T
+  }, [response, config?.recordsPath])
+
+  return {
+    data: rows,
+    loading: query.isLoading ?? false,
+    error: query.error,
+    refetch: query.refetch ?? NOOP,
+    total: typeof response?.total === 'number' ? response.total : undefined,
+    hasMore: typeof response?.hasMore === 'boolean' ? response.hasMore : undefined,
+  }
 }
 
 function useStorage<T>(config: StorageBinding): UseDataResult<T> {
