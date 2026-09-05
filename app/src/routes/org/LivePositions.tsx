@@ -24,15 +24,16 @@ const COLUMNS: Column<LivePosition>[] = [
     cell: (row) => (
       <div className="min-w-0">
         <div className="truncate font-medium text-foreground">{row.positionCode}</div>
-        <div className="truncate text-xs text-muted-foreground">{row.positionName}</div>
+        <div className="truncate text-xs text-muted-foreground">{row.name}</div>
       </div>
     ),
   },
   {
     key: 'person',
     header: 'Person',
-    // A dangling payeeId leaves the position occupied but unnamed. Say so rather
-    // than rendering an empty cell that reads like "nobody".
+    // The payee fields come back as '' — never absent — so every fallback here tests
+    // truthiness, not nullishness. A dangling payeeId leaves the position OCCUPIED but
+    // unnamed; say so rather than rendering a blank that reads like "nobody".
     cell: (row) =>
       row.payeeName ? (
         <span className="text-foreground">{row.payeeName}</span>
@@ -47,7 +48,7 @@ const COLUMNS: Column<LivePosition>[] = [
     header: 'Employee ID',
     cell: (row) => (
       <span className="font-mono text-xs text-muted-foreground">
-        {row.employeeId ?? '—'}
+        {row.employeeId || '—'}
       </span>
     ),
   },
@@ -55,7 +56,16 @@ const COLUMNS: Column<LivePosition>[] = [
     key: 'occupancy',
     header: 'Occupancy',
     align: 'right',
-    cell: (row) => <Badge variant={OCCUPANCY_VARIANT[row.occupancy]}>{row.occupancy}</Badge>,
+    // matchCount is what makes CONFLICT actionable: it says how many assignments
+    // overlapped, which is the first thing anyone fixing the data needs to know.
+    cell: (row) => (
+      <div className="flex items-center justify-end gap-2">
+        {row.occupancy === 'CONFLICT' && (
+          <span className="text-xs text-muted-foreground">{row.matchCount} assignments</span>
+        )}
+        <Badge variant={OCCUPANCY_VARIANT[row.occupancy]}>{row.occupancy}</Badge>
+      </div>
+    ),
   },
 ]
 

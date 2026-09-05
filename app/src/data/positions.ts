@@ -9,18 +9,25 @@ import { useMemo } from 'react'
 import { useData, type UseDataResult } from '@/lib/data'
 import { LIST_POSITIONS } from './callables'
 
-/** What `ICM | List Positions` returns per row. */
+/**
+ * What `ICM | List Positions` returns per row. Verified against the deployed
+ * automation on tool: all nine keys are ALWAYS present, and the payee fields come
+ * back as EMPTY STRINGS rather than absent when there is nobody to name. Typing them
+ * optional would invite `?? fallback`, which never fires on `''`.
+ */
 export interface LivePosition {
   positionId: string
   positionCode: string
-  positionName: string
+  /** the position's display name — the automation calls this `name`, not `positionName` */
+  name: string
+  active: boolean
   occupancy: 'OCCUPIED' | 'VACANT' | 'CONFLICT'
-  payeeId?: string
-  employeeId?: string
-  payeeName?: string
-  effectiveStart?: string
-  effectiveEnd?: string
-  allocationPct?: number
+  /** '' unless exactly one assignment covered the date */
+  payeeId: string
+  employeeId: string
+  payeeName: string
+  /** assignments covering the date: 0 VACANT, 1 OCCUPIED, 2+ CONFLICT */
+  matchCount: number
 }
 
 export interface LivePositionsQuery {
