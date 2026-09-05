@@ -12,6 +12,12 @@ interface ListToolbarProps {
   createLabel?: string
   extra?: ReactNode
   showUpload?: boolean
+  /**
+   * Replaces the placeholder Filter button. The page owns its own control
+   * because only the page knows what its list can be filtered BY — the toolbar
+   * keeps the position and the button order.
+   */
+  filterSlot?: ReactNode
 }
 
 export function ListToolbar({
@@ -22,6 +28,7 @@ export function ListToolbar({
   createLabel = 'Create',
   extra,
   showUpload = true,
+  filterSlot,
 }: ListToolbarProps) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2" data-test-id="list-toolbar">
@@ -36,16 +43,18 @@ export function ListToolbar({
         />
       </div>
       {extra}
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-9"
-        onClick={() => toast('Filters', { description: 'Column & attribute filters open here.' })}
-        data-test-id="list-toolbar-filter"
-      >
-        <Filter className="size-4" />
-        Filter
-      </Button>
+      {filterSlot ?? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          onClick={() => toast('Filters', { description: 'Column & attribute filters open here.' })}
+          data-test-id="list-toolbar-filter"
+        >
+          <Filter className="size-4" />
+          Filter
+        </Button>
+      )}
       <Button
         variant="outline"
         size="sm"

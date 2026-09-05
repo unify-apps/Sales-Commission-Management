@@ -16,6 +16,12 @@ import { Panel, RecordName, DetailField, DetailSection } from '@/components/org/
 import { DataTable, type Column } from '@/components/org/data-table'
 import { EmptyState } from '@/components/org/empty-state'
 import { ListPagination } from '@/components/org/pagination'
+import {
+  PositionsFilter,
+  EMPTY_POSITION_FILTERS,
+  countActiveFilters,
+  type PositionFilters,
+} from '@/components/org/positions-filter'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,7 +43,7 @@ import {
  * merely asking the wrong question.
  */
 /** Rows per page. The callable clamps limit to 200, so this stays well inside it. */
-const PAGE_SIZE = 25
+const PAGE_SIZE = 10
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10)
@@ -59,9 +65,11 @@ export default function Positions() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [page, setPage] = useState(1)
+  const [filters, setFilters] = useState<PositionFilters>(EMPTY_POSITION_FILTERS)
   const { data, loading, error, total, refetch } = useLivePositions({
     asOfDate,
     search,
+    ...filters,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   })
@@ -205,6 +213,15 @@ export default function Positions() {
         searchPlaceholder="Search position name…"
         onCreate={() => setCreateOpen(true)}
         createLabel="Create"
+        filterSlot={
+          <PositionsFilter
+            value={filters}
+            onChange={(next) => {
+              setFilters(next)
+              setPage(1)
+            }}
+          />
+        }
       />
 
       <CreateRecordDialog
@@ -234,7 +251,17 @@ export default function Positions() {
             rowId={(p) => p.positionId}
             loading={loading}
             onRowClick={(p) => setSelected(p)}
-            empty={<EmptyState icon={LayoutGrid} title="No positions match" description="Nothing exists for this date and search. Widen either one." />}
+            empty={
+              <EmptyState
+                icon={LayoutGrid}
+                title="No positions match"
+                description={
+                  countActiveFilters(filters) > 0
+                    ? 'Nothing matches this date, search and filter. Clear a filter or move the date.'
+                    : 'Nothing exists for this date and search. Widen either one.'
+                }
+              />
+            }
           />
           {!loading && positions.length > 0 && total !== undefined ? (
             <ListPagination

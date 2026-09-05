@@ -62,6 +62,16 @@ export interface LivePosition {
 export interface LivePositionsQuery {
   /** matches a position code or a name, case-insensitively; '' means everything */
   search?: string
+  /** stored on the row, so these two narrow SERVER-side and paging stays exact */
+  positionCode?: string
+  name?: string
+  /**
+   * Neither of these exists until the automation has resolved assignments as of
+   * the date, so supplying one makes it fold every match before paging. The
+   * callable bounds that scan and sets `truncated` when it bites.
+   */
+  personName?: string
+  occupancy?: string
   /** the date occupancy is resolved as of — 'YYYY-MM-DD' or epoch millis */
   asOfDate: string
   limit?: number
@@ -86,8 +96,22 @@ export function useLivePositions(
       limit: String(query.limit ?? 50),
       offset: String(query.offset ?? 0),
       includeOccupancy: String(query.includeOccupancy ?? true),
+      positionCode: query.positionCode ?? '',
+      name: query.name ?? '',
+      personName: query.personName ?? '',
+      occupancy: query.occupancy ?? '',
     }),
-    [query.search, query.asOfDate, query.limit, query.offset, query.includeOccupancy],
+    [
+      query.search,
+      query.asOfDate,
+      query.limit,
+      query.offset,
+      query.includeOccupancy,
+      query.positionCode,
+      query.name,
+      query.personName,
+      query.occupancy,
+    ],
   )
 
   return useData<LivePosition[]>('icm-live-positions', 'callable', {
