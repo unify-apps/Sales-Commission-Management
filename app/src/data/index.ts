@@ -28,3 +28,9 @@
 export * from './bindings'
 export { useData } from '@/lib/data'
 export type { StorageBinding, UseDataResult } from '@/lib/data'
+export {
+  useLivePositions,
+  type LivePosition,
+  type LivePositionsQuery,
+  type Occupancy,
+} from './positions'
