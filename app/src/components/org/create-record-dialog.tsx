@@ -158,7 +158,7 @@ export function CreateRecordDialog({
                   <Select value={values[field.name]} onValueChange={(v) => setField(field.name, v)}>
                     <SelectTrigger
                       id={fieldId}
-                      className={cn(showError && 'border-destructive')}
+                      className={cn('w-full', showError && 'border-destructive')}
                       data-test-id={`${fieldId}-trigger`}
                     >
                       <SelectValue placeholder={field.placeholder ?? 'Select…'} />

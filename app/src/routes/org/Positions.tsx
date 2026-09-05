@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { Panel, RecordName, DetailField, DetailSection } from '@/components/org/panel'
 import { DataTable, type Column } from '@/components/org/data-table'
 import { EmptyState } from '@/components/org/empty-state'
+import { ListPagination } from '@/components/org/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +36,9 @@ import {
  * as of a date six months in the past, and the page looked broken when it was
  * merely asking the wrong question.
  */
+/** Rows per page. The callable clamps limit to 200, so this stays well inside it. */
+const PAGE_SIZE = 25
+
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -54,7 +58,13 @@ export default function Positions() {
   const [selected, setSelected] = useState<LivePosition | null>(null)
 
   const [createOpen, setCreateOpen] = useState(false)
-  const { data, loading, error, total, refetch } = useLivePositions({ asOfDate, search })
+  const [page, setPage] = useState(1)
+  const { data, loading, error, total, refetch } = useLivePositions({
+    asOfDate,
+    search,
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+  })
   const { data: titles } = useTitleOptions()
   const { data: payees } = usePayeeOptions()
   const { create } = useCreatePosition()
@@ -175,7 +185,10 @@ export default function Positions() {
               id="positions-as-of"
               type="date"
               value={asOfDate}
-              onChange={(event) => setAsOfDate(event.target.value)}
+              onChange={(event) => {
+                setAsOfDate(event.target.value)
+                setPage(1)
+              }}
               className="h-9 w-40"
               data-test-id="positions-asof-input"
             />
@@ -185,7 +198,10 @@ export default function Positions() {
 
       <ListToolbar
         searchValue={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => {
+          setSearch(value)
+          setPage(1)
+        }}
         searchPlaceholder="Search position name…"
         onCreate={() => setCreateOpen(true)}
         createLabel="Create"
@@ -220,6 +236,17 @@ export default function Positions() {
             onRowClick={(p) => setSelected(p)}
             empty={<EmptyState icon={LayoutGrid} title="No positions match" description="Nothing exists for this date and search. Widen either one." />}
           />
+          {!loading && positions.length > 0 && total !== undefined ? (
+            <ListPagination
+              page={page}
+              pageCount={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+              onPageChange={setPage}
+              showingFrom={(page - 1) * PAGE_SIZE + 1}
+              showingTo={(page - 1) * PAGE_SIZE + positions.length}
+              total={total}
+              testId="positions-pagination"
+            />
+          ) : null}
         </Panel>
       )}
 
