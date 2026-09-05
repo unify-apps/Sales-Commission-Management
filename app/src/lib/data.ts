@@ -103,7 +103,7 @@ function useCallable<T>(config: CallableBinding_Run): UseDataResult<T> {
   )
 
   const query = useExecuteWorkflowNode(
-    { id: binding?.id, context: binding?.context, inputs },
+    { id: binding?.id, context: binding?.context, inputs, options: {} },
     { query: { enabled } },
   )
 
@@ -149,6 +149,7 @@ export function useCallableMutation(binding: CallableBinding) {
           ...binding.storedInputs,
           parameters: { __internals__: internals(), ...parameters },
         },
+        options: {},
       },
     })
     return (data as { response?: Record<string, unknown> } | undefined)?.response ?? {}
