@@ -4,6 +4,7 @@ import { useLivePositions, type LivePosition } from '@/data'
 import { formatDate, formatEpoch } from '@/lib/format'
 import { PageHeader } from '@/components/org/page-header'
 import { ListToolbar } from '@/components/org/list-toolbar'
+import { toast } from 'sonner'
 import { Panel, RecordName, DetailField, DetailSection } from '@/components/org/panel'
 import { DataTable, type Column } from '@/components/org/data-table'
 import { EmptyState } from '@/components/org/empty-state'
@@ -94,19 +95,9 @@ export default function Positions() {
         title="Positions"
         subtitle="The job seats that carry quotas, plans, and rate tables. A person occupies a position; the seat outlives personnel churn."
         meta={total === undefined ? undefined : `${total} position${total === 1 ? '' : 's'}`}
-      />
-
-      {/* Occupancy and the title are both resolved AS OF a date, so the date is part
-          of the question this screen asks, not a filter on the answer. It sits in the
-          toolbar rather than above it so the row of controls stays one row. */}
-      <ListToolbar
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search position name…"
-        createLabel="Create"
-        extra={
+        actions={
           <div className="flex items-center gap-2" data-test-id="positions-asof-field">
-            <Label htmlFor="positions-as-of" className="text-muted-foreground">
+            <Label htmlFor="positions-as-of" className="whitespace-nowrap text-muted-foreground">
               As of
             </Label>
             <Input
@@ -114,11 +105,24 @@ export default function Positions() {
               type="date"
               value={asOfDate}
               onChange={(event) => setAsOfDate(event.target.value)}
-              className="w-40"
+              className="h-9 w-40"
               data-test-id="positions-asof-input"
             />
           </div>
         }
+      />
+
+      <ListToolbar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search position name…"
+        onCreate={() =>
+          toast('Create position', {
+            description:
+              'Positions are created through the ICM automation suite; no create callable is wired to this screen yet.',
+          })
+        }
+        createLabel="Create"
       />
 
       {error ? (
