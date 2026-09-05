@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { GitFork, History, Pencil } from 'lucide-react'
-import { useData } from '@/lib/data'
-import { HIERARCHY, HIERARCHY_VERSION, HIERARCHY_VERSIONS, type HierarchyRow } from '@/data/org-seed'
+import { GitFork, History, Pencil, TriangleAlert } from 'lucide-react'
+import { useHierarchy } from '@/data/hierarchy'
+import { HIERARCHY_VERSION, HIERARCHY_VERSIONS, type HierarchyRow } from '@/data/org-seed'
 import { formatDate } from '@/lib/format'
 import { PageHeader } from '@/components/org/page-header'
 import { ListToolbar } from '@/components/org/list-toolbar'
 import { Panel, RecordName } from '@/components/org/panel'
 import { DataTable, type Column } from '@/components/org/data-table'
+import { OrgChart, type OrgNode } from '@/components/org/org-chart'
 import { EmptyState } from '@/components/org/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,17 +28,11 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 
-interface TreeNode {
-  row: HierarchyRow
-  children: TreeNode[]
-}
-
-function buildTree(rows: HierarchyRow[]): TreeNode[] {
-  const byPos = new Map<string, TreeNode>()
+function buildTree(rows: HierarchyRow[]): OrgNode[] {
+  const byPos = new Map<string, OrgNode>()
   rows.forEach((r) => byPos.set(r.positionName, { row: r, children: [] }))
-  const roots: TreeNode[] = []
+  const roots: OrgNode[] = []
   rows.forEach((r) => {
     const node = byPos.get(r.positionName)!
     if (r.parentPosition && byPos.has(r.parentPosition)) {
@@ -46,46 +41,40 @@ function buildTree(rows: HierarchyRow[]): TreeNode[] {
       roots.push(node)
     }
   })
+  // Siblings arrive in whatever order the backend returned them, which is stable
+  // per call but arbitrary to read. Sorting by position name keeps the chart the
+  // same shape between refreshes and puts each manager's reports in one order.
+  const sortSiblings = (nodes: OrgNode[]) => {
+    nodes.sort((a, b) => a.row.positionName.localeCompare(b.row.positionName))
+    nodes.forEach((node) => sortSiblings(node.children))
+  }
+  sortSiblings(roots)
   return roots
 }
 
-function TreeBranch({ node, depth }: { node: TreeNode; depth: number }) {
-  return (
-    <div data-test-id={`tree-node-${node.row.id}`}>
-      <div
-        className={cn(
-          'flex items-center gap-3 rounded-md border border-transparent px-3 py-2 hover:bg-muted/60',
-          depth === 0 && 'bg-muted/40',
-        )}
-        style={{ marginLeft: depth * 24 }}
-      >
-        <div className="flex size-7 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] text-primary">
-          {node.children.length || '·'}
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-foreground">{node.row.person ?? 'Open seat'}</div>
-          <div className="font-mono text-[11px] text-muted-foreground">{node.row.positionName}</div>
-        </div>
-      </div>
-      {node.children.map((c) => (
-        <TreeBranch key={c.row.id} node={c} depth={depth + 1} />
-      ))}
-    </div>
-  )
-}
-
 export default function Hierarchy() {
-  const { data, loading } = useData<HierarchyRow[]>('org-hierarchy', 'seed', HIERARCHY)
   const [search, setSearch] = useState('')
   const [version, setVersion] = useState(HIERARCHY_VERSION)
   const [view, setView] = useState('table')
   const [selected, setSelected] = useState<HierarchyRow | null>(null)
 
-  const rows = data ?? []
+  // The version drives an as-of date, so changing it re-reads the structure as it
+  // stood that day rather than filtering one fixed snapshot.
+  const { rows, loading, failed, message } = useHierarchy(version)
   const filtered = rows.filter((r) =>
     `${r.positionName} ${r.person ?? ''} ${r.parentPosition ?? ''}`.toLowerCase().includes(search.toLowerCase()),
   )
   const tree = buildTree(rows)
+
+  // A read that failed and a version that genuinely has no relationships are
+  // different facts, and this page must not show the second when it means the first.
+  const loadFailed = (
+    <EmptyState
+      icon={TriangleAlert}
+      title="Couldn't load the hierarchy"
+      description={message ?? 'The reporting structure could not be read. Check you are signed in, then try again.'}
+    />
+  )
 
   const columns: Column<HierarchyRow>[] = [
     { key: 'pos', header: 'Position', width: '24%', cell: (r) => <RecordName name={r.positionName} sub={r.person ?? 'Open seat'} /> },
@@ -135,7 +124,21 @@ export default function Hierarchy() {
         }
       />
 
-      {view === 'table' ? (
+      {failed ? (
+        // One failure state for both views. Rendering it inside each view let the tree
+        // keep its "N relationships" caption, which reads as "this version has none"
+        // when the truth is that nothing was read at all.
+        <Panel>
+          <DataTable
+            testId="hierarchy-table"
+            columns={columns}
+            rows={[]}
+            rowId={(r) => r.id}
+            loading={false}
+            empty={loadFailed}
+          />
+        </Panel>
+      ) : view === 'table' ? (
         <Panel>
           <DataTable
             testId="hierarchy-table"
@@ -152,10 +155,8 @@ export default function Hierarchy() {
           <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
             {version} · {rows.length} relationships
           </div>
-          <div className="space-y-1" data-test-id="hierarchy-tree">
-            {tree.map((n) => (
-              <TreeBranch key={n.row.id} node={n} depth={0} />
-            ))}
+          <div data-test-id="hierarchy-tree">
+            <OrgChart roots={tree} />
           </div>
         </Panel>
       )}

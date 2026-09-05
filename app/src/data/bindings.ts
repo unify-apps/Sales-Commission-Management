@@ -150,3 +150,100 @@ export function extractRecord<T>(data: unknown): T | undefined {
   }
   return extractPage<T>(data).records[0]
 }
+
+// Callable dataSources — the automations this app is allowed to run.
+//
+// A callable is an AUTOMATION on the platform, not an object read. The platform's
+// callables safety check refuses to run one through execute-node unless a real
+// e_data_source backs the call, so every entry here names a dataSource that was
+// provisioned against THIS app's global page. Without it the request comes back
+// `forbidden datasource: not found` — which is why an id is never typed by hand.
+
+export interface CallableBinding {
+  /** the e_data_source id that authorizes this call */
+  readonly id: string
+  readonly context: {
+    readonly appName: string
+    readonly resourceName: string
+    readonly resourceVersion: number
+  }
+  /** the workflow definition this dataSource is bound to */
+  readonly automationId: string
+  /** automation inputs the caller may supply */
+  readonly overridable: readonly string[]
+}
+
+/**
+ * The page every callable dataSource for this app is anchored to. Derived, never
+ * hardcoded — a literal slug names whichever app it was copied from.
+ */
+export const PAGE_SLUG = `global-page-of-${import.meta.env.VITE_APPLICATION_ID}`
+
+/**
+ * `ICM | List Position Hierarchy` — the reporting structure as of a date.
+ *
+ * One row per position in force that day, each side named and its occupant
+ * resolved in bulk, plus the root the store cannot hold: PositionHierarchy
+ * requires a parent, so the top of the tree has no row of its own and the
+ * automation puts it back.
+ */
+export const LIST_POSITION_HIERARCHY: CallableBinding = {
+  id: 'e_6a9bec1aa397f67f706cb0ac',
+  context: {
+    appName: 'callables',
+    resourceName: 'callables_call_automation',
+    resourceVersion: 1575,
+  },
+  automationId: '6a9be08e57dcee3b72fe372c',
+  overridable: ['asOfDate', 'versionName', 'search', 'limit', 'offset'],
+}
+
+/**
+ * Every callables request carries this; it tells the runtime which app and page the
+ * call came from. Omit it and the call is rejected.
+ */
+export function internals() {
+  return { m: 'BUILDER', s: PAGE_SLUG, c: 'PLATFORM', p: 'browser' } as const
+}
+
+/** The row `ICM | List Position Hierarchy` returns. Empty string means "not resolved". */
+export interface PositionHierarchyRow {
+  id: string
+  versionName: string
+  /** YYYY-MM-DD */
+  effectiveStart: string
+  positionId: string
+  positionCode: string
+  positionName: string
+  /** '' when the seat is vacant, or when two assignments contest the date. */
+  person: string
+  parentPositionId: string
+  parentPosition: string
+  parentPerson: string
+  isRoot: boolean
+}
+
+/** The envelope every ICM callable answers with. Branch on `status`, never the HTTP code. */
+export interface CallableEnvelope<T> {
+  status: string
+  success: boolean
+  message?: string
+  total?: number
+  hasMore?: boolean
+  rows?: T[]
+}
+
+/**
+ * A callable's result, unwrapped from the execute-node envelope.
+ *
+ * A transport 200 means the automation RAN, not that the work happened — an
+ * `INVALID_INPUT` arrives as a perfectly healthy 200 — so the status is carried
+ * through rather than collapsed into success/failure here.
+ */
+export function extractCallable<T>(data: unknown): CallableEnvelope<T> | undefined {
+  if (!data || typeof data !== 'object') return undefined
+  const envelope = data as { response?: unknown; status?: unknown }
+  const body = (envelope.response ?? envelope) as CallableEnvelope<T>
+  if (!body || typeof body !== 'object' || typeof body.status !== 'string') return undefined
+  return body
+}
