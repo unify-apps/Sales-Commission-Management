@@ -30,6 +30,7 @@ import SimulatorHub from '@/routes/simulator/SimulatorHub'
 import RepIncentives from '@/routes/rep/RepIncentives'
 import RepPerformance from '@/routes/rep/RepPerformance'
 import RepSimulator from '@/routes/rep/RepSimulator'
+import Mongoose from '@/routes/Mongoose'
 
 // BrowserRouter (clean URLs, no #). The mount path is never hardcoded here — the engine
 // bakes it in as Vite's `base` (VITE_APP_BASE, see vite.config.ts) and the app reads it
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="/rep/performance" element={<AppShell><RepPerformance /></AppShell>} />
         <Route path="/rep/graphs" element={<Navigate to="/rep/performance" replace />} />
         <Route path="/rep/simulator" element={<AppShell><RepSimulator /></AppShell>} />
+        <Route path="/mongoose" element={<AppShell><Mongoose /></AppShell>} />
         <Route path="/simulator/run" element={<Navigate to="/simulator" replace />} />
         <Route path="/simulator/rules" element={<Navigate to="/simulator?tab=rules" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
