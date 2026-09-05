@@ -27,6 +27,17 @@
 
 export * from './bindings'
 export * from './callables'
-export { useLivePositions, type LivePosition, type LivePositionsQuery } from './positions'
+export {
+  useLivePositions,
+  useTitleOptions,
+  usePayeeOptions,
+  useCreatePosition,
+  type LivePosition,
+  type LivePositionsQuery,
+  type TitleOption,
+  type PayeeOption,
+  type CreatePositionInput,
+  type CreatePositionResult,
+} from './positions'
 export { useData } from '@/lib/data'
 export type { StorageBinding, CallableRun, UseDataResult } from '@/lib/data'

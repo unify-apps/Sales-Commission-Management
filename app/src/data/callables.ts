@@ -26,6 +26,8 @@ export interface CallableBinding {
    * Read it off the row; never carry one over from another environment.
    */
   readonly context: {
+    /** present on some rows and absent on others — mirror the row, do not normalise */
+    readonly type?: string
     readonly appName: string
     readonly resourceName: string
     readonly resourceVersion: number
@@ -43,9 +45,9 @@ export interface CallableBinding {
    */
   readonly storedInputs: {
     readonly automationId: string
-    /** '-1' — the latest deployed version of the automation */
-    readonly version: string
-    readonly runtimeConnections: Readonly<Record<string, unknown>>
+    /** '-1' — the latest deployed version. Only on rows whose stored set has it. */
+    readonly version?: string
+    readonly runtimeConnections?: Readonly<Record<string, unknown>>
     readonly synchronous: boolean
     readonly parameters: Readonly<Record<string, string>>
   }
@@ -99,4 +101,85 @@ export const LIST_POSITIONS: CallableBinding = {
  */
 export function internals() {
   return { m: 'BUILDER', s: PAGE_SLUG, c: 'PLATFORM', p: 'browser' } as const
+}
+
+// ---------------------------------------------------------------------------
+// Every value below was READ BACK OFF THE STORED ROW and pasted, never typed by
+// hand. The validator compares the request's context and input keys against the
+// row it names, and the rows genuinely differ — some carry `context.type`, some
+// carry `version`/`runtimeConnections` in their stored inputs. Normalising them
+// into one shape is what produced `forbidden datasource` twice.
+// ---------------------------------------------------------------------------
+
+export const CREATE_POSITION: CallableBinding = {
+  id: 'e_6a9c00f0f684ae771006f90d',
+  context: {
+      "resourceName": "callables_call_automation",
+      "type": "APPLICATION",
+      "appName": "callables",
+      "resourceVersion": 1575
+    },
+  storedInputs: {
+      "automationId": "6a9bfdeac4f2d5527e4c9a63",
+      "parameters": {
+        "positionCode": "{{positionCode}}",
+        "name": "{{name}}",
+        "titleId": "{{titleId}}",
+        "payeeId": "{{payeeId}}",
+        "effectiveStart": "{{effectiveStart}}"
+      },
+      "synchronous": true
+    },
+  overridable: ["positionCode","name","titleId","payeeId","effectiveStart"],
+}
+
+export const LIST_PAYEES: CallableBinding = {
+  id: 'e_6a9c00f1a397f67f706d0241',
+  context: {
+      "resourceName": "callables_call_automation",
+      "type": "APPLICATION",
+      "appName": "callables",
+      "resourceVersion": 1575
+    },
+  storedInputs: {
+      "automationId": "6a9c001e723e7964da56efee",
+      "parameters": {
+        "search": "{{search}}",
+        "limit": "{{limit}}",
+        "offset": "{{offset}}",
+        "activeOnly": "{{activeOnly}}"
+      },
+      "synchronous": true
+    },
+  overridable: ["search","limit","offset","activeOnly"],
+}
+
+export const LIST_TITLES: CallableBinding = {
+  id: 'e_6a9c0376f684ae7710070c46',
+  context: {
+      "resourceName": "callables_call_automation",
+      "type": "APPLICATION",
+      "appName": "callables",
+      "resourceVersion": 1575
+    },
+  storedInputs: {
+      "automationId": "6a9bef655f22d93ee6e9b03a",
+      "parameters": {
+        "action": "{{action}}",
+        "titleId": "{{titleId}}",
+        "titleCode": "{{titleCode}}",
+        "name": "{{name}}",
+        "description": "{{description}}",
+        "category": "{{category}}",
+        "level": "{{level}}",
+        "market": "{{market}}",
+        "function": "{{function}}",
+        "payPeriod": "{{payPeriod}}",
+        "search": "{{search}}",
+        "limit": "{{limit}}",
+        "offset": "{{offset}}"
+      },
+      "synchronous": true
+    },
+  overridable: ["action","titleId","titleCode","name","description","category","level","market","function","payPeriod","search","limit","offset"],
 }

@@ -6,8 +6,9 @@
 // in bulk so a list of N positions is still one call.
 
 import { useMemo } from 'react'
+import { useExecuteWorkflowNodeMutation } from '@unifyapps/app-builder-sdk/hooks/workflow'
 import { useData, type UseDataResult } from '@/lib/data'
-import { LIST_POSITIONS } from './callables'
+import { CREATE_POSITION, LIST_PAYEES, LIST_TITLES, LIST_POSITIONS, internals } from './callables'
 
 /**
  * What `ICM | List Positions` returns per row. Verified against the deployed
@@ -95,4 +96,122 @@ export function useLivePositions(
     recordsPath: 'positions',
     enabled: Boolean(query.asOfDate),
   })
+}
+
+// ---------------------------------------------------------------------------
+// Create
+// ---------------------------------------------------------------------------
+
+/** A pickable title, from `ICM | Manage Titles` in its LIST action. */
+export interface TitleOption {
+  titleId: string
+  titleCode: string
+  name: string
+}
+
+/** A pickable person, from `ICM | List Payees`. */
+export interface PayeeOption {
+  payeeId: string
+  employeeId: string
+  name: string
+  status: string
+}
+
+/** Titles for the Create dialog's select. */
+export function useTitleOptions(): UseDataResult<TitleOption[]> {
+  const parameters = useMemo(
+    // Manage Titles takes thirteen inputs and the stored row templates all of
+    // them, so all thirteen are sent: a subset is refused outright.
+    () => ({
+      ...Object.fromEntries(LIST_TITLES.overridable.map((k) => [k, ''])),
+      action: 'LIST',
+      limit: '200',
+    }),
+    [],
+  )
+  return useData<TitleOption[]>('icm-title-options', 'callable', {
+    binding: LIST_TITLES,
+    parameters,
+    recordsPath: 'titles',
+  })
+}
+
+/**
+ * People for the Create dialog's select. `activeOnly` is TRUE here on purpose —
+ * a leaver must stay findable elsewhere (a position they held historically still
+ * shows them), but offering one a brand-new seat is the mistake worth preventing.
+ */
+export function usePayeeOptions(search = ''): UseDataResult<PayeeOption[]> {
+  const parameters = useMemo(
+    () => ({ search, limit: '200', offset: '0', activeOnly: 'true' }),
+    [search],
+  )
+  return useData<PayeeOption[]>('icm-payee-options', 'callable', {
+    binding: LIST_PAYEES,
+    parameters,
+    recordsPath: 'payees',
+  })
+}
+
+export interface CreatePositionInput {
+  positionCode: string
+  name: string
+  titleId: string
+  /** '' means an open seat — no assignment is written */
+  payeeId?: string
+  /** 'YYYY-MM-DD'; '' means today, UTC */
+  effectiveStart?: string
+}
+
+export interface CreatePositionResult {
+  status: 'OK' | 'INVALID_INPUT' | 'DUPLICATE_CODE' | 'TITLE_NOT_FOUND' | 'PAYEE_NOT_FOUND'
+  success: boolean
+  message: string
+  positionId?: string
+  positionCode?: string
+  attributeId?: string
+  assignmentId?: string
+}
+
+/**
+ * Creating a position writes up to three objects — the seat, the title it
+ * carries, and who holds it — so it is ONE callable rather than three writes
+ * from here. Every check runs before the first write, which is why a refusal
+ * comes back as a status and never as a half-made position.
+ *
+ * A mutation, not a query: it has side effects and must fire on submit, not as
+ * soon as its inputs are non-empty.
+ */
+export function useCreatePosition() {
+  const { mutateAsync, isPending, error, reset } = useExecuteWorkflowNodeMutation()
+
+  const create = async (input: CreatePositionInput): Promise<CreatePositionResult> => {
+    const data = await mutateAsync({
+      data: {
+        id: CREATE_POSITION.id,
+        context: CREATE_POSITION.context,
+        inputs: {
+          ...CREATE_POSITION.storedInputs,
+          parameters: {
+            __internals__: internals(),
+            positionCode: input.positionCode,
+            name: input.name,
+            titleId: input.titleId,
+            payeeId: input.payeeId ?? '',
+            effectiveStart: input.effectiveStart ?? '',
+          },
+        },
+        options: {},
+      },
+    })
+    // the automation's own answer IS data.response — a non-OK status is a
+    // REFUSAL the dialog must show, not a thrown error
+    return (data as { response?: CreatePositionResult })?.response ?? {
+      status: 'INVALID_INPUT',
+      success: false,
+      message: 'The create automation returned nothing.',
+    }
+  }
+
+  return { create, isPending, error, reset }
 }

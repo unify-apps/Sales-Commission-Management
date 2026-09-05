@@ -1,9 +1,16 @@
 import { useState } from 'react'
 import { LayoutGrid, Clock, Briefcase } from 'lucide-react'
-import { useLivePositions, type LivePosition } from '@/data'
+import {
+  useLivePositions,
+  useTitleOptions,
+  usePayeeOptions,
+  useCreatePosition,
+  type LivePosition,
+} from '@/data'
 import { formatDate, formatEpoch } from '@/lib/format'
 import { PageHeader } from '@/components/org/page-header'
 import { ListToolbar } from '@/components/org/list-toolbar'
+import { CreateRecordDialog, type CreateField, type CreateValues } from '@/components/org/create-record-dialog'
 import { toast } from 'sonner'
 import { Panel, RecordName, DetailField, DetailSection } from '@/components/org/panel'
 import { DataTable, type Column } from '@/components/org/data-table'
@@ -37,7 +44,54 @@ export default function Positions() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<LivePosition | null>(null)
 
-  const { data, loading, error, total } = useLivePositions({ asOfDate, search })
+  const [createOpen, setCreateOpen] = useState(false)
+  const { data, loading, error, total, refetch } = useLivePositions({ asOfDate, search })
+  const { data: titles } = useTitleOptions()
+  const { data: payees } = usePayeeOptions()
+  const { create } = useCreatePosition()
+
+  // Ids, never display names: two people can share a name and a title can be
+  // renamed, so the label is for the human and the value is what gets written.
+  const fields: CreateField[] = [
+    { name: 'positionCode', label: 'Position Code', required: true, placeholder: 'POS-W-AE-05' },
+    { name: 'effectiveStart', label: 'Effective From', placeholder: 'YYYY-MM-DD' },
+    { name: 'name', label: 'Position Name', required: true, placeholder: 'AE — West 05', full: true },
+    {
+      name: 'titleId',
+      label: 'Title',
+      kind: 'select',
+      required: true,
+      placeholder: 'Select…',
+      options: (titles ?? []).map((t) => ({ value: t.titleId, label: t.name })),
+    },
+    {
+      name: 'payeeId',
+      label: 'Person (Latest)',
+      kind: 'select',
+      placeholder: 'Leave blank for open seat',
+      options: (payees ?? []).map((p) => ({ value: p.payeeId, label: `${p.name} · ${p.employeeId}` })),
+    },
+  ]
+
+  // Returning false keeps the dialog open, because the automation REFUSES rather
+  // than throws: a duplicate code comes back as a status, and closing would throw
+  // away everything typed.
+  async function handleCreate(values: CreateValues) {
+    const result = await create({
+      positionCode: values.positionCode.trim(),
+      name: values.name.trim(),
+      titleId: values.titleId,
+      payeeId: values.payeeId,
+      effectiveStart: values.effectiveStart.trim(),
+    })
+    if (result.status !== 'OK') {
+      toast('Could not create the position', { description: result.message })
+      return false
+    }
+    toast('Position created', { description: `${result.positionCode} — ${values.name.trim()}` })
+    refetch()
+    return true
+  }
   const positions = data ?? []
 
   const columns: Column<LivePosition>[] = [
@@ -116,13 +170,18 @@ export default function Positions() {
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search position name…"
-        onCreate={() =>
-          toast('Create position', {
-            description:
-              'Positions are created through the ICM automation suite; no create callable is wired to this screen yet.',
-          })
-        }
+        onCreate={() => setCreateOpen(true)}
         createLabel="Create"
+      />
+
+      <CreateRecordDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        title="Create Position"
+        description="Add a new job seat that can carry quotas and plans."
+        fields={fields}
+        onSubmit={handleCreate}
+        testId="create-position-dialog"
       />
 
       {error ? (
