@@ -93,7 +93,7 @@ export default function Positions() {
       <PageHeader
         eyebrow="Organization"
         title="Positions"
-        subtitle="The job seats that carry quotas, plans, and rate tables. A person occupies a position; the seat outlives personnel churn."
+        subtitle="The job seats that carry quotas, plans, and rate tables. A person occupies a position, the seat outlives personnel churn."
         meta={total === undefined ? undefined : `${total} position${total === 1 ? '' : 's'}`}
         actions={
           <div className="flex items-center gap-2" data-test-id="positions-asof-field">
