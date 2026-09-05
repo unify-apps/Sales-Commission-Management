@@ -177,29 +177,60 @@ function Subtree({
       {visible.length > 0 ? (
         <>
           <Connector />
-          <div className="relative flex items-start gap-6">
-            {visible.length > 1 ? (
-              <span
-                className="absolute top-0 h-px bg-border"
-                style={{ left: '7.5rem', right: '7.5rem' }}
-                aria-hidden="true"
-              />
-            ) : null}
-            {visible.map((child) => (
-              <div key={child.positionId} className="flex flex-col items-center">
-                <span className="h-6 w-px bg-border" aria-hidden="true" />
-                <Subtree
-                  node={child}
-                  selfId={selfId}
-                  spine={spine}
-                  spineChildOf={spineChildOf}
-                  childrenOf={childrenOf}
-                  expanded={expanded}
-                  onExpand={onExpand}
-                  onOpen={onOpen}
-                />
-              </div>
-            ))}
+          {/*
+            The elbows are drawn PER CHILD rather than as one absolutely
+            positioned rule across the row. A single rule has to be inset by half
+            a card to reach the outer children's centres, which means hard-coding
+            the card width and the gap — and it drifts the moment either changes,
+            or the row is scrolled. Here each child owns a half-width segment on
+            each side, and the first and last simply omit their outer half, so the
+            line always ends exactly under the outermost cards.
+
+            The row has NO gap: the spacing is padding INSIDE each cell, so the
+            segments meet instead of leaving a break at every gutter.
+          */}
+          <div className="flex items-start">
+            {visible.map((child, index) => {
+              const isFirst = index === 0
+              const isLast = index === visible.length - 1
+              const onlyChild = visible.length === 1
+              return (
+                <div key={child.positionId} className="flex flex-col items-center px-3">
+                  <div className="relative h-6 w-full" aria-hidden="true">
+                    {!onlyChild ? (
+                      <>
+                        {/* left half — omitted on the first child */}
+                        <span
+                          className={cn(
+                            'absolute left-0 top-0 h-px w-1/2',
+                            isFirst ? 'bg-transparent' : 'bg-border',
+                          )}
+                        />
+                        {/* right half — omitted on the last child */}
+                        <span
+                          className={cn(
+                            'absolute right-0 top-0 h-px w-1/2',
+                            isLast ? 'bg-transparent' : 'bg-border',
+                          )}
+                        />
+                      </>
+                    ) : null}
+                    {/* the drop from the elbow into this child's card */}
+                    <span className="absolute left-1/2 top-0 h-6 w-px -translate-x-1/2 bg-border" />
+                  </div>
+                  <Subtree
+                    node={child}
+                    selfId={selfId}
+                    spine={spine}
+                    spineChildOf={spineChildOf}
+                    childrenOf={childrenOf}
+                    expanded={expanded}
+                    onExpand={onExpand}
+                    onOpen={onOpen}
+                  />
+                </div>
+              )
+            })}
           </div>
         </>
       ) : null}
