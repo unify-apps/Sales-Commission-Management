@@ -1,6 +1,13 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface ListPaginationProps {
   showingFrom: number
@@ -18,6 +25,14 @@ interface ListPaginationProps {
   onPageChange?: (page: number) => void
   /** Disables the controls while a page is in flight, so a fast click cannot double-fire. */
   busy?: boolean
+  /**
+   * Rows per page. Pass `pageSize` with `onPageSizeChange` and the control gains
+   * a ROWS picker; omit them and it is not rendered, so the pages that do not
+   * offer the choice are unchanged.
+   */
+  pageSize?: number
+  pageSizeOptions?: number[]
+  onPageSizeChange?: (size: number) => void
 }
 
 export function ListPagination({
@@ -30,6 +45,9 @@ export function ListPagination({
   pageCount,
   onPageChange,
   busy = false,
+  pageSize,
+  pageSizeOptions = [10, 25, 50, 100],
+  onPageSizeChange,
 }: ListPaginationProps) {
   const isLive = typeof page === 'number' && typeof onPageChange === 'function'
   const lastPage = Math.max(1, pageCount ?? pages)
@@ -45,9 +63,34 @@ export function ListPagination({
 
   return (
     <div className="flex items-center justify-between border-t border-border px-5 py-3" data-test-id={testId}>
-      <span className="text-sm text-muted-foreground">
-        Showing {showingFrom} – {showingTo} of {total.toLocaleString()}
-      </span>
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-muted-foreground">
+          Showing {showingFrom} – {showingTo} of {total.toLocaleString()}
+        </span>
+        {typeof pageSize === 'number' && onPageSizeChange ? (
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+              Rows
+            </span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => onPageSizeChange(Number(v))}
+              disabled={busy}
+            >
+              <SelectTrigger className="h-8 w-[76px]" data-test-id={`${testId}-page-size`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pageSizeOptions.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+      </div>
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"

@@ -14,6 +14,11 @@ import {
 } from 'lucide-react'
 import { useData } from '@/lib/data'
 import { PROFILES, type Profile } from '@/data/org-seed'
+import { useProfiles } from '@/data/use-profiles'
+import { CURRENT_MONTH, periodToAsOfDate } from '@/lib/period'
+import { platformRowToProfile } from '@/data/platform-profile'
+import { useProfileHierarchy } from '@/data/use-hierarchy'
+import { HierarchyChain } from '@/components/org/hierarchy-chain'
 import { formatDate, formatMoney, initials } from '@/lib/format'
 import { Panel } from '@/components/org/panel'
 import { ProfilePerformance } from '@/components/org/profile-performance'
@@ -86,15 +91,47 @@ export default function ProfileDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { data } = useData<Profile[]>('org-profiles', 'seed', PROFILES)
-  const profile = (data ?? []).find((p) => p.id === id)
+  const seedProfile = (data ?? []).find((p) => p.id === id)
+
+  // `:id` carries TWO kinds of key, and which one decides where the record comes
+  // from. The dashboard, the org tree and the statement all link here with a SEED
+  // id; the Profiles table links with an EMPLOYEE id, because that is the only
+  // handle the callable can look a person up by. Seed is tried first so those
+  // three keep working untouched.
+  //
+  // `search` is ICONTAINS, so "E-1004" would also match "E-10041" — the exact
+  // employeeId is re-checked on the result rather than trusting the first row.
+  const platform = useProfiles({
+    search: seedProfile ? '' : (id ?? ''),
+    asOfDate: periodToAsOfDate(CURRENT_MONTH),
+    limit: 10,
+    enabled: !seedProfile && Boolean(id),
+  })
+  const platformRow = seedProfile ? undefined : platform.rows.find((r) => r.employeeId === id)
+
+  // Mapped into the SAME shape the seed uses, so every section below renders for
+  // a platform person too — the fields no callable returns are filled from the
+  // placeholders in `platform-profile.ts` rather than removed from the page.
+  const profile = seedProfile ?? (platformRow ? platformRowToProfile(platformRow) : undefined)
+
+  // The reporting line for a platform person, walked from PositionHierarchy and
+  // resolved to people through PayeePositionAssignment. Keyed on POSITION, which
+  // is what the hierarchy is actually about — a person is only ever in it by way
+  // of the seat they hold.
+  const asOfDate = periodToAsOfDate(CURRENT_MONTH)
+  const hierarchy = useProfileHierarchy(platformRow?.positionId, asOfDate)
 
   if (!profile) {
     return (
       <div data-test-id="profile-detail-missing">
         <EmptyState
           icon={UserRound}
-          title="Profile not found"
-          description="This profile may have been removed or is unavailable for the selected period."
+          title={platform.loading ? 'Loading profile…' : 'Profile not found'}
+          description={
+            platform.loading
+              ? 'Fetching this person from the profile service.'
+              : 'This profile may have been removed or is unavailable for the selected period.'
+          }
           action={<Button variant="outline" onClick={() => navigate('/organization/profiles')}>Back to Profiles</Button>}
         />
       </div>
@@ -191,8 +228,23 @@ export default function ProfileDetail() {
           </div>
         </Section>
 
-        <Section icon={GitFork} title="Hierarchy" id="hierarchy" defaultOpen={false} warn={!profile.manager}>
-          {profile.manager ? (
+        <Section
+          icon={GitFork}
+          title="Hierarchy"
+          id="hierarchy"
+          defaultOpen={false}
+          warn={platformRow ? hierarchy.chain.length === 0 && !hierarchy.loading : !profile.manager}
+        >
+          {platformRow ? (
+            <HierarchyChain
+              chain={hierarchy.chain}
+              reportsTo={hierarchy.reportsTo}
+              childrenOf={hierarchy.childrenOf}
+              loading={hierarchy.loading}
+              broken={hierarchy.broken}
+              asOfDate={asOfDate}
+            />
+          ) : profile.manager ? (
             <div className="space-y-4">
               <div className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3">
                 <span className="text-sm text-muted-foreground">Reports to</span>

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { IdCard, TriangleAlert } from 'lucide-react'
 import { useProfiles, type ProfileRow } from '@/data/use-profiles'
+import { useProfileFilterOptions } from '@/data/use-profile-filters'
 import type { EmployeeStatus } from '@/data/org-seed'
 import { CURRENT_MONTH, MONTH_PERIODS, periodToAsOfDate } from '@/lib/period'
 import { initials } from '@/lib/format'
@@ -10,6 +12,14 @@ import { Panel } from '@/components/org/panel'
 import { DataTable, type Column } from '@/components/org/data-table'
 import { EmptyState } from '@/components/org/empty-state'
 import { ListPagination } from '@/components/org/pagination'
+import {
+  ProfileFilter,
+  activeConditions,
+  searchText,
+  withSearch,
+  type FilterCondition,
+  type FilterField,
+} from '@/components/org/profile-filter'
 import { StatusBadge } from '@/components/org/status-badge'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -20,10 +30,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const PAGE_SIZE = 25
-const ANY_STATUS = 'ANY'
-const STATUS_OPTIONS = [ANY_STATUS, 'ACTIVE', 'TERMINATED'] as const
-/** Search runs server-side, so it is debounced rather than fired per keystroke. */
+/** Rows per page. The callable clamps `limit` to 1..200, so every option is legal. */
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
+const DEFAULT_PAGE_SIZE = 10
+/** The box is live, so it waits for a pause rather than firing per keystroke. */
 const SEARCH_DEBOUNCE_MS = 300
 
 /**
@@ -40,29 +50,27 @@ const STATUS_LABEL: Record<string, EmployeeStatus> = {
 }
 
 export default function Profiles() {
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [status, setStatus] = useState<string>(ANY_STATUS)
+  // APPLIED conditions only. The panel edits its own draft, so nothing here
+  // changes — and no fetch fires — until Apply is pressed.
+  const [conditions, setConditions] = useState<FilterCondition[]>([])
   const [period, setPeriod] = useState<string>(CURRENT_MONTH)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const navigate = useNavigate()
 
-  // Debounce is an external system (a timer), which is what useEffect is for.
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(id)
-  }, [search])
-
-  // Any change to what is being asked for resets to the first page — otherwise a
-  // filter applied on page 4 asks for rows 75-100 of a set that may hold three.
-  // Done in the handlers rather than an effect: the page reset is caused by the
-  // interaction, so it belongs to the event, not to a re-render triggered by it.
+  // The toolbar box writes straight into the conditions, so the panel always
+  // opens showing what was typed. It applies LIVE — unlike the panel, which
+  // waits for Apply — because a quick search that needed confirming would not be
+  // quick.
   function handleSearchChange(value: string) {
-    setSearch(value)
+    setConditions((rows) => withSearch(rows, value))
     setPage(1)
   }
 
-  function handleStatusChange(value: string) {
-    setStatus(value)
+  // Row 24 of a 10-row page is row 4 of a 25-row one; rather than work out where
+  // the reader was, go back to the first page, which is always a defined place.
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
     setPage(1)
   }
 
@@ -71,24 +79,52 @@ export default function Profiles() {
     setPage(1)
   }
 
+  function handleApplyFilters(next: FilterCondition[]) {
+    setConditions(next)
+    // Filters applied while on page 4 would otherwise ask for rows 30-40 of a
+    // set that may hold three.
+    setPage(1)
+  }
+
   const asOfDate = useMemo(() => periodToAsOfDate(period), [period])
+
+  // Only the SEARCH value is debounced; every other filter arrives already
+  // committed by Apply, so it queries immediately.
+  const typedSearch = searchText(conditions)
+  const [debouncedSearch, setDebouncedSearch] = useState(typedSearch)
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(typedSearch), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(id)
+  }, [typedSearch])
+
+  // One value per field, from complete rows only.
+  const filterValues = useMemo(() => {
+    const byField: Partial<Record<FilterField, string>> = {}
+    for (const c of activeConditions(conditions)) byField[c.field] = c.value.trim()
+    return byField
+  }, [conditions])
 
   const { rows, total, status: callStatus, message, loading, error } = useProfiles({
     search: debouncedSearch,
-    status: status === ANY_STATUS ? '' : status,
+    status: filterValues.status ?? '',
+    titleId: filterValues.titleId ?? '',
+    territoryId: filterValues.territoryId ?? '',
+    managerPositionId: filterValues.managerPositionId ?? '',
     asOfDate,
-    limit: PAGE_SIZE,
-    offset: (page - 1) * PAGE_SIZE,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
   })
 
-  const isFiltered = debouncedSearch.trim().length > 0 || status !== ANY_STATUS
+  const filterOptions = useProfileFilterOptions(asOfDate)
+
+  const isFiltered = activeConditions(conditions).length > 0
   const countLabel = isFiltered
     ? `${total} matching ${total === 1 ? 'profile' : 'profiles'}`
     : `${total} ${total === 1 ? 'profile' : 'profiles'}`
 
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const showingFrom = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
-  const showingTo = Math.min(page * PAGE_SIZE, total)
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const showingTo = Math.min(page * pageSize, total)
 
   // A 200 means the automation ran, not that the request was usable — branch on
   // the callable's own status, never on the transport.
@@ -150,35 +186,34 @@ export default function Profiles() {
         meta={countLabel}
       />
       <ListToolbar
-        searchValue={search}
+        searchValue={typedSearch}
         onSearchChange={handleSearchChange}
         searchPlaceholder="Search name, email or Employee ID…"
         showUpload={false}
+        filterSlot={
+          <ProfileFilter
+            conditions={conditions}
+            onApply={handleApplyFilters}
+            options={{
+              titleId: filterOptions.titles,
+              territoryId: filterOptions.territories,
+              managerPositionId: filterOptions.managers,
+            }}
+            loading={filterOptions.loading}
+            truncated={filterOptions.truncated}
+          />
+        }
         extra={
-          <>
-            <Select value={status} onValueChange={handleStatusChange}>
-              <SelectTrigger className="h-9 w-[150px]" data-test-id="profiles-status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s === ANY_STATUS ? 'Any status' : s.charAt(0) + s.slice(1).toLowerCase()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={period} onValueChange={handlePeriodChange}>
-              <SelectTrigger className="h-9 w-[160px]" data-test-id="profiles-period">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTH_PERIODS.map((p) => (
-                  <SelectItem key={p} value={p}>{`Period · ${p}`}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
+          <Select value={period} onValueChange={handlePeriodChange}>
+            <SelectTrigger className="h-9 w-[160px]" data-test-id="profiles-period">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_PERIODS.map((p) => (
+                <SelectItem key={p} value={p}>{`Period · ${p}`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         }
       />
 
@@ -200,12 +235,11 @@ export default function Profiles() {
           rows={rows}
           rowId={(p) => p.payeeId}
           loading={loading}
-          // Rows are deliberately NOT clickable yet. ProfileDetail resolves its
-          // record out of the seed set by that set's own id, and these rows carry
-          // a platform `payeeId` — navigating would land every row on "not
-          // found". Re-enabling it needs a single-profile callable, which does
-          // not exist: `ICM | List Profiles` is a list read and the detail screen
-          // shows plan, quota and salary fields that no ICM callable returns yet.
+          // Navigates by EMPLOYEE id, not the platform payeeId: `employeeId` is
+          // the only handle the callable can look a person up by (its `search`),
+          // and it carries a real unique index, so the detail page can resolve
+          // one person with one small query instead of scanning pages.
+          onRowClick={(p) => navigate(`/organization/profiles/${p.employeeId}`)}
           empty={
             failed ? (
               <EmptyState
@@ -217,7 +251,7 @@ export default function Profiles() {
               <EmptyState
                 icon={IdCard}
                 title="No profiles match those filters"
-                description="Clear the search or choose another status or period."
+                description="Adjust or clear the filters, or choose another period."
               />
             ) : (
               <EmptyState
@@ -238,6 +272,9 @@ export default function Profiles() {
             pageCount={pageCount}
             onPageChange={setPage}
             busy={loading}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            onPageSizeChange={handlePageSizeChange}
           />
         ) : null}
       </Panel>

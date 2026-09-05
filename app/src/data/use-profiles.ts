@@ -59,6 +59,8 @@ export interface ProfilesQuery {
   offset?: number
   /** false skips every org join and returns payees alone. */
   includeOrg?: boolean
+  /** false holds the query back entirely — for a caller that may not need it. */
+  enabled?: boolean
 }
 
 export interface UseProfilesResult {
@@ -101,7 +103,7 @@ function toParameters(q: ProfilesQuery) {
 
 /** Reads `ICM | List Profiles` through the `listProfiles` data source. */
 export function useProfiles(query: ProfilesQuery): UseProfilesResult {
-  const enabled = Boolean(LIST_PROFILES.id)
+  const enabled = Boolean(LIST_PROFILES.id) && query.enabled !== false
 
   // Callers pass `query` as a fresh object literal every render, so memoising on
   // it directly would never hit. Key on the serialised parameters instead: it is

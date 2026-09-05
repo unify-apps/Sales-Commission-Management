@@ -100,6 +100,75 @@ export const LIST_PROFILES: CallableBinding = {
 }
 
 /**
+ * `ICM | Manage Titles` in LIST mode — the title reference table, used to populate
+ * the Profiles filter. Provisioned by the platform's own tooling as
+ * `ds_list_titles_all`; the shorter `ds_list_titles` row omits parameters the
+ * automation reads and fails with "No such property: titleId".
+ */
+export const LIST_TITLES: CallableBinding = {
+  id: 'e_6a9c0376f684ae7710070c46',
+  context: {
+    resourceName: 'callables_call_automation',
+    type: 'APPLICATION',
+    appName: 'callables',
+    resourceVersion: 1575,
+  },
+  storedInputs: {
+    automationId: '6a9bef655f22d93ee6e9b03a',
+    synchronous: true,
+    parameters: {
+      action: '{{action}}',
+      titleId: '{{titleId}}',
+      titleCode: '{{titleCode}}',
+      name: '{{name}}',
+      description: '{{description}}',
+      category: '{{category}}',
+      level: '{{level}}',
+      market: '{{market}}',
+      function: '{{function}}',
+      payPeriod: '{{payPeriod}}',
+      search: '{{search}}',
+      limit: '{{limit}}',
+      offset: '{{offset}}',
+    },
+  },
+  overridable: ['action', 'search', 'limit', 'offset'],
+}
+
+/**
+ * `ICM | List Position Hierarchy` — the reporting structure as of a date, folded
+ * from `PositionHierarchy` (who reports to whom), `PayeePositionAssignment` (who
+ * held each seat that day) and `Position`/`Payee` for their names.
+ *
+ * Rows are FLAT and carry `parentPositionId`, so a caller walks the chain itself
+ * rather than the automation returning a nested tree it would have to guess the
+ * shape of.
+ */
+export const LIST_POSITION_HIERARCHY: CallableBinding = {
+  // `ds_list_position_hierarchy`, already provisioned and deployed on this app.
+  id: 'e_6a9bec1aa397f67f706cb0ac',
+  context: {
+    appName: 'callables',
+    resourceName: 'callables_call_automation',
+    resourceVersion: 1575,
+  },
+  storedInputs: {
+    automationId: '6a9be08e57dcee3b72fe372c',
+    version: '-1',
+    runtimeConnections: {},
+    synchronous: true,
+    parameters: {
+      asOfDate: '{{asOfDate}}',
+      versionName: '{{versionName}}',
+      search: '{{search}}',
+      limit: '{{limit}}',
+      offset: '{{offset}}',
+    },
+  },
+  overridable: ['asOfDate', 'versionName', 'search', 'limit', 'offset'],
+}
+
+/**
  * The execute-node envelope is `{ id, response, lookupReferences,
  * executionInstanceId }`, and for a callable the automation's whole `result`
  * object is `response`.

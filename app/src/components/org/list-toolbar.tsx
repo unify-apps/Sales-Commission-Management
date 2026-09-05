@@ -12,6 +12,18 @@ interface ListToolbarProps {
   createLabel?: string
   extra?: ReactNode
   showUpload?: boolean
+  /**
+   * Real filtering. Pass a node and it replaces the Filter button entirely, so a
+   * page can own the control and its panel. Omit it and the button keeps its
+   * original explain-only toast, leaving the pages still on seed data untouched.
+   */
+  filterSlot?: ReactNode
+  /**
+   * Hide the built-in search box. For a page whose filter panel already owns
+   * free-text matching, two inputs writing one query parameter is a bug waiting
+   * to happen — only one of them can win.
+   */
+  showSearch?: boolean
 }
 
 export function ListToolbar({
@@ -22,30 +34,38 @@ export function ListToolbar({
   createLabel = 'Create',
   extra,
   showUpload = true,
+  filterSlot,
+  showSearch = true,
 }: ListToolbarProps) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2" data-test-id="list-toolbar">
-      <div className="relative min-w-[240px] flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={searchValue}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={searchPlaceholder}
-          className="h-9 pl-9"
-          data-test-id="list-toolbar-search"
-        />
-      </div>
+      {showSearch ? (
+        <div className="relative min-w-[240px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchValue}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="h-9 pl-9"
+            data-test-id="list-toolbar-search"
+          />
+        </div>
+      ) : (
+        <div className="flex-1" />
+      )}
       {extra}
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-9"
-        onClick={() => toast('Filters', { description: 'Column & attribute filters open here.' })}
-        data-test-id="list-toolbar-filter"
-      >
-        <Filter className="size-4" />
-        Filter
-      </Button>
+      {filterSlot ?? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          onClick={() => toast('Filters', { description: 'Column & attribute filters open here.' })}
+          data-test-id="list-toolbar-filter"
+        >
+          <Filter className="size-4" />
+          Filter
+        </Button>
+      )}
       <Button
         variant="outline"
         size="sm"
