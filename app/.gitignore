@@ -28,3 +28,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# This project installs with bun and commits bun.lock. npm works for a local dev
+# server, but its lockfile must never join the tree - two lockfiles drift, and the
+# platform builds with bun.
+package-lock.json
