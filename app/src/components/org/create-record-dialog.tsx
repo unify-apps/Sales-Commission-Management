@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DatePicker } from '@/components/org/date-picker'
 import {
   Select,
   SelectContent,
@@ -154,7 +155,17 @@ export function CreateRecordDialog({
                   {field.required ? <span className="ml-0.5 text-destructive">*</span> : null}
                 </Label>
 
-                {field.kind === 'select' ? (
+                {field.kind === 'date' ? (
+                  <DatePicker
+                    id={fieldId}
+                    value={values[field.name]}
+                    onChange={(next) => setField(field.name, next)}
+                    placeholder={field.placeholder ?? 'Pick a date'}
+                    allowClear
+                    className={cn(showError && 'border-destructive')}
+                    testId={fieldId}
+                  />
+                ) : field.kind === 'select' ? (
                   <Select value={values[field.name]} onValueChange={(v) => setField(field.name, v)}>
                     <SelectTrigger
                       id={fieldId}
@@ -182,13 +193,7 @@ export function CreateRecordDialog({
                 ) : (
                   <Input
                     id={fieldId}
-                    type={
-                      field.kind === 'date'
-                        ? 'date'
-                        : field.kind === 'number'
-                          ? 'number'
-                          : 'text'
-                    }
+                    type={field.kind === 'number' ? 'number' : 'text'}
                     value={values[field.name]}
                     placeholder={field.placeholder}
                     onChange={(e) => setField(field.name, e.target.value)}

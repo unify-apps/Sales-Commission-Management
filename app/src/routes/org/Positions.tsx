@@ -16,6 +16,7 @@ import { Panel, RecordName, DetailField, DetailSection } from '@/components/org/
 import { DataTable, type Column } from '@/components/org/data-table'
 import { EmptyState } from '@/components/org/empty-state'
 import { ListPagination } from '@/components/org/pagination'
+import { DatePicker } from '@/components/org/date-picker'
 import {
   PositionsFilter,
   EMPTY_POSITION_FILTERS,
@@ -24,7 +25,6 @@ import {
 } from '@/components/org/positions-filter'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Sheet,
@@ -189,16 +189,15 @@ export default function Positions() {
             <Label htmlFor="positions-as-of" className="whitespace-nowrap text-muted-foreground">
               As of
             </Label>
-            <Input
+            <DatePicker
               id="positions-as-of"
-              type="date"
               value={asOfDate}
-              onChange={(event) => {
-                setAsOfDate(event.target.value)
+              onChange={(next) => {
+                setAsOfDate(next)
                 setPage(1)
               }}
-              className="h-9 w-40"
-              data-test-id="positions-asof-input"
+              className="w-44"
+              testId="positions-asof-input"
             />
           </div>
         }
