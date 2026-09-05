@@ -1,39 +1,108 @@
-// Callable data sources — a page calling a DEPLOYED automation.
+// Callable dataSources — the automations this app is allowed to run.
 //
-// Deliberately NOT in `bindings.ts`: that file's header says
-// `provision_data_sources` REWRITES it with the app's five storage dataSource
-// ids, so anything hand-added there is lost the next time the app is
-// provisioned. These are a different family and live in their own file.
+// A callable is an AUTOMATION on the platform, not an object read. The platform
+// refuses to run one through execute-node unless a real `e_data_source` backs the
+// call, so every entry here names a dataSource provisioned against THIS app's
+// global page.
 //
-// Every call must send the WHOLE stored input set and override only the fields
-// the stored set marks with a `{{template}}` placeholder. Sending a subset — or
-// changing a field the stored set holds as a literal — is refused with
-// `forbidden datasource : invalid input`, which is a 500 and reads like a bug on
-// the server. Same rule as `FETCH` in `bindings.ts`.
+// EVERY VALUE BELOW IS COPIED FROM THE STORED e_data_source ROW and is only valid
+// against that row. `validateDataSourceContextAndInputs` compares the request's
+// CONTEXT and INPUT KEYS against it, so a borrowed `resourceVersion` or a missing
+// input key fails with `forbidden datasource : invalid input` — a message that
+// names inputs even when the context is what is wrong. That error cost this build
+// an afternoon: the context was short a `resourceVersion` the whole time.
+//
+// To read a row: GET /api/entity/e_data_source/<id>. Searching that type needs a
+// `properties.interfacePageId` filter and errors without one.
 
-export const LIST_PROFILES = {
-  /** The `e_data_source` entity on app `app-1621b11a65c8` (Ledger), tool prod. */
+export interface CallableBinding {
+  /** the e_data_source id that authorizes this call */
+  readonly id: string
+  /** MIRROR OF THE STORED ROW'S CONTEXT — `resourceVersion` is per-dataSource. */
+  readonly context: {
+    readonly type?: string
+    readonly appName: string
+    readonly resourceName: string
+    readonly resourceVersion: number
+  }
+  /** The WHOLE input set stored on the row. Send all of it, every call. */
+  readonly storedInputs: {
+    readonly automationId: string
+    /** '-1' — the latest deployed version. Only on rows whose stored set has it. */
+    readonly version?: string
+    readonly runtimeConnections?: Readonly<Record<string, unknown>>
+    readonly synchronous: boolean
+    readonly parameters: Readonly<Record<string, string>>
+  }
+  /** automation inputs the caller may supply */
+  readonly overridable: readonly string[]
+}
+
+/**
+ * The page every callable dataSource for this app is anchored to. Derived, never
+ * hardcoded — a literal slug names whichever app it was copied from.
+ */
+export const PAGE_SLUG = `global-page-of-${import.meta.env.VITE_APPLICATION_ID}`
+
+/**
+ * Goes in `parameters.__internals__` — NESTED under that key, never spread flat.
+ * It tells the runtime which app and page the call came from.
+ */
+export function internals() {
+  return { m: 'BUILDER', s: PAGE_SLUG, c: 'PLATFORM', p: 'browser' } as const
+}
+
+/**
+ * `ICM | List Profiles` — a paged, searchable, filterable list of payees, each with
+ * the seat they hold as of a date, its title and territory, and their manager. Every
+ * join is folded in bulk by the automation, so the page never makes one call per row.
+ *
+ * Deployed on tool, suite 14/14 green. Contract:
+ * `ua-icm/docs/automations/list-profiles.md`.
+ */
+export const LIST_PROFILES: CallableBinding = {
+  // `ds_list_profiles`, anchored to this app's global page. Read off the stored row.
   id: 'e_6a9c33daa397f67f706db4a6',
   context: {
     appName: 'callables',
     resourceName: 'callables_call_automation',
+    resourceVersion: 1575,
   },
   storedInputs: {
-    // `ICM | List Profiles`. The DEPLOYED copy is what a caller reaches.
     automationId: '6a9c00e1c4f2d5527e4cb2ee',
+    version: '-1',
+    runtimeConnections: {},
     synchronous: true,
-    // The one overridable field. It is a TEMPLATE, not a literal: with literals
-    // stored here the caller could never vary search, filters or paging, which
-    // is the entire reason this data source exists.
-    parameters: '{{parameters}}',
+    // the row's `{{ }}` templates; every one is overridden per call
+    parameters: {
+      search: '{{search}}',
+      status: '{{status}}',
+      titleId: '{{titleId}}',
+      territoryId: '{{territoryId}}',
+      managerPositionId: '{{managerPositionId}}',
+      asOfDate: '{{asOfDate}}',
+      limit: '{{limit}}',
+      offset: '{{offset}}',
+      includeOrg: '{{includeOrg}}',
+    },
   },
-  overridable: ['parameters'],
-} as const
+  overridable: [
+    'search',
+    'status',
+    'titleId',
+    'territoryId',
+    'managerPositionId',
+    'asOfDate',
+    'limit',
+    'offset',
+    'includeOrg',
+  ],
+}
 
 /**
  * The execute-node envelope is `{ id, response, lookupReferences,
- * executionInstanceId }` (ExecuteWorkflowNodeResponse), and for a callable the
- * automation's whole `result` object is `response`.
+ * executionInstanceId }`, and for a callable the automation's whole `result`
+ * object is `response`.
  *
  * Loud, not empty — the same choice `extractPage` makes in `bindings.ts`.
  * Returning a blank list for a response whose shape changed is the failure this
@@ -44,8 +113,6 @@ export function extractCallable<T>(data: unknown): T {
     const response = (data as { response?: unknown }).response
     if (response && typeof response === 'object') return response as T
   }
-  // Already unwrapped by a caller upstream — tolerated, same as extractPage does
-  // for a bare array, because double-extraction is the easiest mistake to make.
   if (data && typeof data === 'object' && 'status' in data) return data as T
   throw new Error('unexpected callable response: no `response` object')
 }

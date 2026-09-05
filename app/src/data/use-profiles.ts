@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useExecuteWorkflowNode } from '@unifyapps/app-builder-sdk/hooks/workflow'
 
-import { LIST_PROFILES, extractCallable } from './callables'
+import { LIST_PROFILES, extractCallable, internals } from './callables'
 
 /** One row of `ICM | List Profiles`. Org structure only — the callable carries no money. */
 export interface ProfileRow {
@@ -110,12 +110,20 @@ export function useProfiles(query: ProfilesQuery): UseProfilesResult {
   // check.
   const parametersKey = JSON.stringify(toParameters(query))
 
-  // The WHOLE stored set, with only the templated field replaced — a subset is
-  // refused as "forbidden datasource : invalid input".
+  // The WHOLE stored input set, with every templated parameter replaced. A subset
+  // — of the inputs OR of the parameter keys — is refused as
+  // "forbidden datasource : invalid input", and so is a context missing its
+  // `resourceVersion`. Spreading the binding is what keeps both right by
+  // construction rather than by remembering.
   const inputs = useMemo(
     () => ({
       ...LIST_PROFILES.storedInputs,
-      parameters: JSON.parse(parametersKey) as ReturnType<typeof toParameters>,
+      parameters: {
+        ...(JSON.parse(parametersKey) as ReturnType<typeof toParameters>),
+        // NESTED under this key, never spread flat: it tells the runtime which
+        // app and page the call came from.
+        __internals__: internals(),
+      },
     }),
     [parametersKey],
   )
