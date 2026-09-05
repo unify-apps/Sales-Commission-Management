@@ -23,8 +23,24 @@ test('a callable binding carries what the platform validator compares', () => {
   // e_data_source row. A binding missing any of these produces a request the platform
   // rejects as `forbidden datasource`, so an empty string here is a real defect.
   expect(LIST_POSITIONS.id).toMatch(/^e_/)
-  expect(LIST_POSITIONS.automationId).toBeTruthy()
-  expect(LIST_POSITIONS.context.appName).toBe('callables')
-  expect(LIST_POSITIONS.context.resourceName).toBe('callables_call_automation')
+  expect(LIST_POSITIONS.storedInputs.automationId).toBeTruthy()
   expect(LIST_POSITIONS.overridable).toContain('asOfDate')
+
+  // The context is compared key by key. `type` is the one that is easy to drop,
+  // because leaving it out fails as "invalid input" — which reads like an inputs
+  // problem and sends you looking in the wrong place.
+  expect(LIST_POSITIONS.context).toEqual({
+    type: 'APPLICATION',
+    appName: 'callables',
+    resourceName: 'callables_call_automation',
+    resourceVersion: 2832,
+  })
+
+  // The stored input set is three keys. Sending a subset — or nesting one of them
+  // inside `parameters` — is refused, so the binding must carry all three.
+  expect(Object.keys(LIST_POSITIONS.storedInputs).sort()).toEqual([
+    'automationId',
+    'parameters',
+    'synchronous',
+  ])
 })

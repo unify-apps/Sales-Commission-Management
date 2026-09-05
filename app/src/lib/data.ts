@@ -85,22 +85,25 @@ export function useData<T>(
   return { data: undefined, loading: false, error: undefined, refetch: NOOP }
 }
 
-// An automation call. The inputs are the shape the platform's
-// `validateDataSourceContextAndInputs` compares against the stored e_data_source row:
-// the same `automationId` and `synchronous` it holds, with `parameters` filling in the
-// `{{ }}` templates. Sending keys the row does not carry is refused, which is why the
-// three below are all there is.
+// An automation call. `validateDataSourceContextAndInputs` compares the request's
+// input KEYS against the stored e_data_source row, so the whole stored set goes out
+// every time — spread, not retyped. Verified against tool: dropping `synchronous`,
+// dropping `automationId`, or nesting either inside `parameters` all come back
+// `forbidden datasource : invalid input`, and so does a wrong context.resourceVersion.
+//
+// `parameters` is REPLACED rather than merged: the stored copy holds `{{ }}` templates,
+// and an un-overridden one would reach the automation as the literal string "{{limit}}".
+// __internals__ is nested under its own key — never spread flat.
 function useCallable<T>(config: CallableRun): UseDataResult<T> {
   const binding = config?.binding
   const enabled = Boolean(binding?.id) && config?.enabled !== false
 
   const inputs = useMemo(
     () => ({
-      automationId: binding?.automationId,
-      synchronous: true,
-      parameters: { ...internals(), ...(config?.parameters ?? {}) },
+      ...binding?.storedInputs,
+      parameters: { __internals__: internals(), ...(config?.parameters ?? {}) },
     }),
-    [binding?.automationId, config?.parameters],
+    [binding?.storedInputs, config?.parameters],
   )
 
   const query = useExecuteWorkflowNode(
