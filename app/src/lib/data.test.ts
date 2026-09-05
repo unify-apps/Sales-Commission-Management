@@ -30,10 +30,9 @@ test('a callable binding carries what the platform validator compares', () => {
   // because leaving it out fails as "invalid input" — which reads like an inputs
   // problem and sends you looking in the wrong place.
   expect(LIST_POSITIONS.context).toEqual({
-    type: 'APPLICATION',
     appName: 'callables',
     resourceName: 'callables_call_automation',
-    resourceVersion: 2832,
+    resourceVersion: 1575,
   })
 
   // The stored input set is three keys. Sending a subset — or nesting one of them
@@ -41,6 +40,8 @@ test('a callable binding carries what the platform validator compares', () => {
   expect(Object.keys(LIST_POSITIONS.storedInputs).sort()).toEqual([
     'automationId',
     'parameters',
+    'runtimeConnections',
     'synchronous',
+    'version',
   ])
 })

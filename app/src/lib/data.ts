@@ -85,15 +85,14 @@ export function useData<T>(
   return { data: undefined, loading: false, error: undefined, refetch: NOOP }
 }
 
-// An automation call. The request is the stored e_data_source row's input set PLUS the
-// envelope keys the runtime expects (`version`, `runtimeConnections`), and the stored
-// half is spread rather than retyped so its keys cannot drift.
+// An automation call. The request carries the stored e_data_source row's input set
+// verbatim — spread, never retyped — because `validateDataSourceContextAndInputs`
+// compares those keys and the context against the row.
 //
-// `validateDataSourceContextAndInputs` compares the context and the stored input keys.
-// Verified against tool: dropping `synchronous`, dropping `automationId`, nesting either
-// inside `parameters`, omitting `context.type`, or a wrong `context.resourceVersion` all
-// come back `forbidden datasource : invalid input` — the context ones included, which is
-// why that message is not reliable evidence that the INPUTS are what is wrong.
+// Verified against the provisioned row on tool: its five input keys return 200, three
+// of them return `forbidden datasource : invalid input`, and so does a resourceVersion
+// belonging to a DIFFERENT dataSource. That message names inputs even when the context
+// is the thing that is wrong, so it is not evidence about which half to look at.
 //
 // `parameters` is REPLACED rather than merged: the stored copy holds `{{ }}` templates,
 // and an un-overridden one would reach the automation as the literal string "{{limit}}".
@@ -105,11 +104,6 @@ function useCallable<T>(config: CallableRun): UseDataResult<T> {
   const inputs = useMemo(
     () => ({
       ...binding?.storedInputs,
-      // Not on the e_data_source row — part of the call envelope the runtime expects
-      // alongside it. '-1' means "the latest deployed version of the automation", which
-      // is the only version a caller should ever pin to.
-      version: '-1',
-      runtimeConnections: {},
       parameters: { __internals__: internals(), ...(config?.parameters ?? {}) },
     }),
     [binding?.storedInputs, config?.parameters],

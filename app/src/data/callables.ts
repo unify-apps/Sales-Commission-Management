@@ -7,21 +7,25 @@
 // `forbidden datasource: not found` — which is why an id is never typed by hand or
 // carried over from another app.
 //
-// `context` and `automationId` must match the stored dataSource exactly: the platform
-// runs `validateDataSourceContextAndInputs`, comparing the request against the row.
-// `overridable` lists the automation inputs the app may set per call; everything else
-// on the row is fixed.
+// EVERY VALUE BELOW IS COPIED FROM THE STORED e_data_source ROW, and is only valid
+// against that row. `validateDataSourceContextAndInputs` compares the request's context
+// and input keys against it, so a `resourceVersion` or an input key set borrowed from a
+// different dataSource fails with `forbidden datasource : invalid input` — a message
+// that names inputs even when the context is what is wrong.
+//
+// To read a row: GET /api/entity/e_data_source/<id>. Searching that type needs a
+// `properties.interfacePageId` filter and errors without one.
 
 export interface CallableBinding {
   /** the e_data_source id that authorizes this call */
   readonly id: string
   /**
-   * The stored row's context, COMPLETE. Every key is compared, `type` included —
-   * omitting it is `forbidden datasource : invalid input`, the same error a missing
-   * input key gives, which makes it easy to misread as an inputs problem.
+   * MIRROR OF THE STORED ROW'S CONTEXT. `resourceVersion` is compared and is
+   * per-dataSource — a wrong one is `forbidden datasource : invalid input`, the same
+   * error a bad INPUT gives, which makes it easy to go looking in the wrong place.
+   * Read it off the row; never carry one over from another environment.
    */
   readonly context: {
-    readonly type: string
     readonly appName: string
     readonly resourceName: string
     readonly resourceVersion: number
@@ -39,6 +43,9 @@ export interface CallableBinding {
    */
   readonly storedInputs: {
     readonly automationId: string
+    /** '-1' — the latest deployed version of the automation */
+    readonly version: string
+    readonly runtimeConnections: Readonly<Record<string, unknown>>
     readonly synchronous: boolean
     readonly parameters: Readonly<Record<string, string>>
   }
@@ -61,15 +68,18 @@ export const PAGE_SLUG = `global-page-of-${import.meta.env.VITE_APPLICATION_ID}`
  * `ua-icm/docs/automations/list-positions.md`.
  */
 export const LIST_POSITIONS: CallableBinding = {
-  id: 'e_6a9bd39bf684ae771006508f',
+  // `ds_list_positions`, provisioned by the platform's own tooling against this app's
+  // global page. Read straight off the stored row — see the header note.
+  id: 'e_6a9bd839f684ae7710066170',
   context: {
-    type: 'APPLICATION',
     appName: 'callables',
     resourceName: 'callables_call_automation',
-    resourceVersion: 2832,
+    resourceVersion: 1575,
   },
   storedInputs: {
     automationId: '6a9bcafbc4f2d5527e3c324c',
+    version: '-1',
+    runtimeConnections: {},
     synchronous: true,
     // the row's `{{ }}` templates; every one is overridden per call
     parameters: {
