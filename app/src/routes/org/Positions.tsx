@@ -26,9 +26,18 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 
-// The occupant is resolved as of a date, so a fixed default keeps the first
-// render deterministic; the user changes it with the picker.
-const DEFAULT_AS_OF = '2026-03-14'
+/**
+ * TODAY, UTC — the same day the automations default to when asOfDate is blank.
+ *
+ * This used to be a hardcoded 2026-03-14, chosen while the only data was fixtures
+ * whose windows sit in early 2026. That made anything created LATER invisible on
+ * load: a seat whose title and occupant start today is correctly reported VACANT
+ * as of a date six months in the past, and the page looked broken when it was
+ * merely asking the wrong question.
+ */
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
 // Occupancy is a three-state answer, not a boolean. CONFLICT means two
 // assignments covered the date and the automation refused to pick one — it gets
@@ -40,7 +49,7 @@ const OCCUPANCY_VARIANT = {
 } as const
 
 export default function Positions() {
-  const [asOfDate, setAsOfDate] = useState(DEFAULT_AS_OF)
+  const [asOfDate, setAsOfDate] = useState(todayUtc)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<LivePosition | null>(null)
 
@@ -54,7 +63,15 @@ export default function Positions() {
   // renamed, so the label is for the human and the value is what gets written.
   const fields: CreateField[] = [
     { name: 'positionCode', label: 'Position Code', required: true, placeholder: 'POS-W-AE-05' },
-    { name: 'effectiveStart', label: 'Effective From', placeholder: 'YYYY-MM-DD' },
+    {
+      name: 'effectiveStart',
+      label: 'Effective From',
+      kind: 'date',
+      // Prefilled with today so a new seat is in force on the date the list is
+      // showing. Leaving it blank means today anyway — the automation applies
+      // that default — so the field never silently means something else.
+      defaultValue: todayUtc(),
+    },
     { name: 'name', label: 'Position Name', required: true, placeholder: 'AE — West 05', full: true },
     {
       name: 'titleId',

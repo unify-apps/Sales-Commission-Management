@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-export type FieldKind = 'text' | 'number' | 'select' | 'checkbox'
+export type FieldKind = 'text' | 'number' | 'select' | 'checkbox' | 'date'
 
 export interface CreateField {
   name: string
@@ -38,13 +38,15 @@ export interface CreateField {
   full?: boolean
   // For checkbox fields: extra help text under the label.
   hint?: string
+  /** Prefilled when the dialog opens. A 'date' field usually wants today. */
+  defaultValue?: string
 }
 
 export type CreateValues = Record<string, string>
 
 function buildInitial(fields: CreateField[]): CreateValues {
   return fields.reduce<CreateValues>((acc, f) => {
-    acc[f.name] = ''
+    acc[f.name] = f.defaultValue ?? ''
     return acc
   }, {})
 }
@@ -180,7 +182,13 @@ export function CreateRecordDialog({
                 ) : (
                   <Input
                     id={fieldId}
-                    type={field.kind === 'number' ? 'number' : 'text'}
+                    type={
+                      field.kind === 'date'
+                        ? 'date'
+                        : field.kind === 'number'
+                          ? 'number'
+                          : 'text'
+                    }
                     value={values[field.name]}
                     placeholder={field.placeholder}
                     onChange={(e) => setField(field.name, e.target.value)}
