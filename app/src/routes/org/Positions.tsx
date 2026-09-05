@@ -133,7 +133,7 @@ export default function Positions() {
     {
       key: 'name',
       header: 'Position',
-      width: '26%',
+      width: '30%',
       // the seat's own name over the title it carries — the title comes from the
       // PositionAttribute row in force on the as-of date, so it is '' for a seat
       // that has none rather than a guess from a neighbouring row
@@ -142,6 +142,7 @@ export default function Positions() {
     {
       key: 'person',
       header: 'Person (Latest)',
+      width: '26%',
       // Four states, not two. "Open seat" is only correct for VACANT; a CONFLICT is a
       // data problem the screen must not launder into an empty seat, and an OCCUPIED
       // row whose payee record is gone is occupied by someone we cannot name.
@@ -164,7 +165,16 @@ export default function Positions() {
       },
     },
     {
+      key: 'employeeId',
+      header: 'Employee ID',
+      width: '22%',
+      cell: (p) => (
+        <span className="font-mono text-[13px] text-muted-foreground">{p.employeeId || '—'}</span>
+      ),
+    },
+    {
       key: 'effectiveFrom',
+      width: '22%',
       // NOT "Incentive Start" — that field does not exist in ICM. This is when the
       // position's current attributes took effect, which is what the model holds.
       header: 'Effective From',
