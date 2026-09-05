@@ -3,6 +3,7 @@ import { LayoutGrid, Clock, Briefcase } from 'lucide-react'
 import { useLivePositions, type LivePosition } from '@/data'
 import { formatDate, formatEpoch } from '@/lib/format'
 import { PageHeader } from '@/components/org/page-header'
+import { ListToolbar } from '@/components/org/list-toolbar'
 import { Panel, RecordName, DetailField, DetailSection } from '@/components/org/panel'
 import { DataTable, type Column } from '@/components/org/data-table'
 import { EmptyState } from '@/components/org/empty-state'
@@ -43,30 +44,46 @@ export default function Positions() {
       key: 'name',
       header: 'Position',
       width: '26%',
-      cell: (p) => <RecordName name={p.positionCode} sub={p.name} />,
+      // the seat's own name over the title it carries — the title comes from the
+      // PositionAttribute row in force on the as-of date, so it is '' for a seat
+      // that has none rather than a guess from a neighbouring row
+      cell: (p) => <RecordName name={p.name} sub={p.titleName || undefined} />,
     },
     {
       key: 'person',
-      header: 'Person',
-      cell: (p) =>
-        p.payeeName ? (
+      header: 'Person (Latest)',
+      // Four states, not two. "Open seat" is only correct for VACANT; a CONFLICT is a
+      // data problem the screen must not launder into an empty seat, and an OCCUPIED
+      // row whose payee record is gone is occupied by someone we cannot name.
+      cell: (p) => {
+        if (p.occupancy === 'CONFLICT') {
+          return <Badge variant="destructive">Conflicting assignments</Badge>
+        }
+        if (p.occupancy === 'VACANT') {
+          return (
+            <Badge variant="outline" className="border-dashed font-normal text-muted-foreground">
+              Open seat
+            </Badge>
+          )
+        }
+        return p.payeeName ? (
           <span className="text-sm text-foreground">{p.payeeName}</span>
         ) : (
-          <span className="text-sm text-muted-foreground">
-            {p.occupancy === 'OCCUPIED' ? 'Unnamed payee' : '—'}
-          </span>
-        ),
+          <span className="text-sm text-muted-foreground">Unnamed payee</span>
+        )
+      },
     },
     {
-      key: 'employeeId',
-      header: 'Employee ID',
-      cell: (p) => <span className="font-mono text-[13px] text-muted-foreground">{p.employeeId || '—'}</span>,
-    },
-    {
-      key: 'occupancy',
-      header: 'Occupancy',
+      key: 'effectiveFrom',
+      // NOT "Incentive Start" — that field does not exist in ICM. This is when the
+      // position's current attributes took effect, which is what the model holds.
+      header: 'Effective From',
       align: 'right',
-      cell: (p) => <Badge variant={OCCUPANCY_VARIANT[p.occupancy]}>{p.occupancy}</Badge>,
+      cell: (p) => (
+        <span className="font-mono text-[13px] text-muted-foreground">
+          {formatEpoch(p.attributeEffectiveStart)}
+        </span>
+      ),
     },
   ]
 
@@ -75,33 +92,34 @@ export default function Positions() {
       <PageHeader
         eyebrow="Organization"
         title="Positions"
-        subtitle="The job seats that carry quotas, plans, and rate tables, read live from the ICM | List Positions automation. Change the date and the occupant changes with it."
+        subtitle="The job seats that carry quotas, plans, and rate tables. A person occupies a position; the seat outlives personnel churn."
         meta={total === undefined ? undefined : `${total} position${total === 1 ? '' : 's'}`}
       />
 
-      <div className="flex flex-wrap items-end gap-4 py-4" data-test-id="positions-toolbar">
-        <div className="grid gap-1.5" data-test-id="positions-asof-field">
-          <Label htmlFor="positions-as-of">As of</Label>
-          <Input
-            id="positions-as-of"
-            type="date"
-            value={asOfDate}
-            onChange={(event) => setAsOfDate(event.target.value)}
-            className="w-44"
-            data-test-id="positions-asof-input"
-          />
-        </div>
-        <div className="grid min-w-56 flex-1 gap-1.5" data-test-id="positions-search-field">
-          <Label htmlFor="positions-search">Search</Label>
-          <Input
-            id="positions-search"
-            value={search}
-            placeholder="Position code or name…"
-            onChange={(event) => setSearch(event.target.value)}
-            data-test-id="positions-search-input"
-          />
-        </div>
-      </div>
+      {/* Occupancy and the title are both resolved AS OF a date, so the date is part
+          of the question this screen asks, not a filter on the answer. It sits in the
+          toolbar rather than above it so the row of controls stays one row. */}
+      <ListToolbar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search position name…"
+        createLabel="Create"
+        extra={
+          <div className="flex items-center gap-2" data-test-id="positions-asof-field">
+            <Label htmlFor="positions-as-of" className="text-muted-foreground">
+              As of
+            </Label>
+            <Input
+              id="positions-as-of"
+              type="date"
+              value={asOfDate}
+              onChange={(event) => setAsOfDate(event.target.value)}
+              className="w-40"
+              data-test-id="positions-asof-input"
+            />
+          </div>
+        }
+      />
 
       {error ? (
         <Panel>
@@ -145,6 +163,10 @@ export default function Positions() {
                     label="Assignments Covering This Date"
                     value={String(selected.matchCount)}
                   />
+                  <DetailField
+                    label="Attributes Effective From"
+                    value={formatEpoch(selected.attributeEffectiveStart)}
+                  />
                   {selected.occupancy === 'OCCUPIED' ? (
                     <>
                       <DetailField
@@ -174,6 +196,7 @@ export default function Positions() {
                 <DetailSection title="Position Info" icon={<Briefcase className="size-4" />}>
                   <DetailField label="Position Code" value={selected.positionCode} />
                   <DetailField label="Position Name" value={selected.name} />
+                  <DetailField label="Title" value={selected.titleName || '—'} />
                   <DetailField
                     label="Occupancy"
                     value={<Badge variant={OCCUPANCY_VARIANT[selected.occupancy]}>{selected.occupancy}</Badge>}

@@ -29,6 +29,17 @@ export interface LivePosition {
   /** assignments covering the date: 0 VACANT, 1 OCCUPIED, 2+ CONFLICT */
   matchCount: number
 
+  // The POSITION's own effective-dated attributes, independent of who holds it — a
+  // vacant seat still has a title. From the PositionAttribute row in force on the
+  // as-of date, so a re-titled position does not show a stale one.
+  //
+  // '' when no attribute row applies, or when its titleId points at a Title that no
+  // longer exists: a dangling reference degrades to an empty title rather than
+  // crashing the page.
+  titleName: string
+  /** absent when no attribute row applies */
+  attributeEffectiveStart?: number
+
   // The window and split of the ONE assignment that resolved this row.
   //
   // OPTIONAL, not nullable: the runtime DROPS null properties from a response rather
