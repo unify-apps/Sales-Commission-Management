@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useExecuteWorkflowNode } from '@unifyapps/app-builder-sdk/hooks/workflow'
 
 import { FETCH, andFilter, extractPage, pageInput, type LeafFilter } from '@/data/bindings'
+import { internals, type CallableBinding } from '@/data/callables'
 
 export type BindingKind = 'seed' | 'storage' | 'callable'
 
@@ -15,6 +16,18 @@ export interface UseDataResult<T> {
 }
 
 const NOOP = () => {}
+
+/** Config for `kind: 'callable'` — an automation run through its dataSource. */
+export interface CallableRun {
+  /** the entry from `@/data/callables` that authorizes this call */
+  binding: CallableBinding
+  /** automation inputs; only keys in `binding.overridable` are accepted */
+  parameters?: Record<string, string>
+  /** where the rows sit in the automation's output, e.g. 'positions' */
+  recordsPath?: string
+  /** hold the call until its inputs are ready */
+  enabled?: boolean
+}
 
 /** Config for `kind: 'storage'` — records read from a backend object. */
 export interface StorageBinding {
@@ -39,13 +52,20 @@ export interface StorageBinding {
 //
 // For 'seed', the third argument IS the data — returned as-is, no fetch.
 // For 'storage', the read executes the app's FETCH dataSource binding (see
-// `@/data/bindings`, written by provision_data_sources). 'callable' is still a
-// declaration only.
+// `@/data/bindings`, written by provision_data_sources).
+// For 'callable', it runs an AUTOMATION through the dataSource that authorizes it
+// (see `@/data/callables`) — a different mechanism from 'storage', which reads
+// objects. Both go through this function so both appear in the Data panel.
 export function useData<T>(id: string, kind: 'seed', seed: T): UseDataResult<T>
 export function useData<T>(
   id: string,
   kind: 'storage',
   config: StorageBinding,
+): UseDataResult<T>
+export function useData<T>(
+  id: string,
+  kind: 'callable',
+  config: CallableRun,
 ): UseDataResult<T>
 export function useData<T>(id: string, kind: BindingKind, config: unknown): UseDataResult<T>
 export function useData<T>(
@@ -59,7 +79,60 @@ export function useData<T>(
   if (kind === 'storage') {
     return useStorage<T>(config as StorageBinding)
   }
+  if (kind === 'callable') {
+    return useCallable<T>(config as CallableRun)
+  }
   return { data: undefined, loading: false, error: undefined, refetch: NOOP }
+}
+
+// An automation call. The request carries the stored e_data_source row's input set
+// verbatim — spread, never retyped — because `validateDataSourceContextAndInputs`
+// compares those keys and the context against the row.
+//
+// Verified against the provisioned row on tool: its five input keys return 200, three
+// of them return `forbidden datasource : invalid input`, and so does a resourceVersion
+// belonging to a DIFFERENT dataSource. That message names inputs even when the context
+// is the thing that is wrong, so it is not evidence about which half to look at.
+//
+// `parameters` is REPLACED rather than merged: the stored copy holds `{{ }}` templates,
+// and an un-overridden one would reach the automation as the literal string "{{limit}}".
+// __internals__ is nested under its own key — never spread flat.
+function useCallable<T>(config: CallableRun): UseDataResult<T> {
+  const binding = config?.binding
+  const enabled = Boolean(binding?.id) && config?.enabled !== false
+
+  const inputs = useMemo(
+    () => ({
+      ...binding?.storedInputs,
+      parameters: { __internals__: internals(), ...(config?.parameters ?? {}) },
+    }),
+    [binding?.storedInputs, config?.parameters],
+  )
+
+  const query = useExecuteWorkflowNode(
+    { id: binding?.id, context: binding?.context, inputs },
+    { query: { enabled } },
+  )
+
+  // The automation's own output IS `data.response` — status, totals and rows together.
+  const response = (query.data as { response?: Record<string, unknown> } | undefined)
+    ?.response
+
+  const rows = useMemo(() => {
+    if (!response) return undefined
+    if (!config?.recordsPath) return response as T
+    const at = response[config.recordsPath]
+    return (Array.isArray(at) ? at : []) as T
+  }, [response, config?.recordsPath])
+
+  return {
+    data: rows,
+    loading: query.isLoading ?? false,
+    error: query.error,
+    refetch: query.refetch ?? NOOP,
+    total: typeof response?.total === 'number' ? response.total : undefined,
+    hasMore: typeof response?.hasMore === 'boolean' ? response.hasMore : undefined,
+  }
 }
 
 function useStorage<T>(config: StorageBinding): UseDataResult<T> {

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DatePicker } from '@/components/org/date-picker'
 import {
   Select,
   SelectContent,
@@ -20,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-export type FieldKind = 'text' | 'number' | 'select' | 'checkbox'
+export type FieldKind = 'text' | 'number' | 'select' | 'checkbox' | 'date'
 
 export interface CreateField {
   name: string
@@ -28,17 +29,25 @@ export interface CreateField {
   kind?: FieldKind
   placeholder?: string
   required?: boolean
-  options?: string[]
+  /**
+   * A plain string is both the stored value and the label. Use the object form
+   * when the value is an ID and the label is what a human recognises — matching
+   * a record by its display name is not safe, because names are neither unique
+   * nor stable.
+   */
+  options?: Array<string | { value: string; label: string }>
   full?: boolean
   // For checkbox fields: extra help text under the label.
   hint?: string
+  /** Prefilled when the dialog opens. A 'date' field usually wants today. */
+  defaultValue?: string
 }
 
 export type CreateValues = Record<string, string>
 
 function buildInitial(fields: CreateField[]): CreateValues {
   return fields.reduce<CreateValues>((acc, f) => {
-    acc[f.name] = ''
+    acc[f.name] = f.defaultValue ?? ''
     return acc
   }, {})
 }
@@ -59,7 +68,13 @@ export function CreateRecordDialog({
   description?: string
   fields: CreateField[]
   submitLabel?: string
-  onSubmit: (values: CreateValues) => void
+  /**
+   * Return `false` to KEEP THE DIALOG OPEN — for a create the server can refuse
+   * (a duplicate key, a missing reference), where closing would throw away
+   * everything the user typed. Returning nothing closes it, which is what a
+   * purely local create wants and what every existing caller does.
+   */
+  onSubmit: (values: CreateValues) => void | boolean | Promise<void | boolean>
   testId?: string
 }) {
   const [values, setValues] = useState<CreateValues>(() => buildInitial(fields))
@@ -83,8 +98,12 @@ export function CreateRecordDialog({
   function handleSubmit() {
     setTouched(true)
     if (!isValid) return
-    onSubmit(values)
-    handleOpenChange(false)
+    const outcome = onSubmit(values)
+    if (outcome instanceof Promise) {
+      outcome.then((keepOpen) => { if (keepOpen !== false) handleOpenChange(false) })
+      return
+    }
+    if (outcome !== false) handleOpenChange(false)
   }
 
   return (
@@ -136,21 +155,39 @@ export function CreateRecordDialog({
                   {field.required ? <span className="ml-0.5 text-destructive">*</span> : null}
                 </Label>
 
-                {field.kind === 'select' ? (
+                {field.kind === 'date' ? (
+                  <DatePicker
+                    id={fieldId}
+                    value={values[field.name]}
+                    onChange={(next) => setField(field.name, next)}
+                    placeholder={field.placeholder ?? 'Pick a date'}
+                    allowClear
+                    className={cn(showError && 'border-destructive')}
+                    testId={fieldId}
+                  />
+                ) : field.kind === 'select' ? (
                   <Select value={values[field.name]} onValueChange={(v) => setField(field.name, v)}>
                     <SelectTrigger
                       id={fieldId}
-                      className={cn(showError && 'border-destructive')}
+                      className={cn('w-full', showError && 'border-destructive')}
                       data-test-id={`${fieldId}-trigger`}
                     >
                       <SelectValue placeholder={field.placeholder ?? 'Select…'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {(field.options ?? []).map((opt) => (
-                        <SelectItem key={opt} value={opt} data-test-id={`${fieldId}-option-${opt.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
-                          {opt}
-                        </SelectItem>
-                      ))}
+                      {(field.options ?? []).map((opt) => {
+                        const value = typeof opt === 'string' ? opt : opt.value
+                        const label = typeof opt === 'string' ? opt : opt.label
+                        return (
+                          <SelectItem
+                            key={value}
+                            value={value}
+                            data-test-id={`${fieldId}-option-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                          >
+                            {label}
+                          </SelectItem>
+                        )
+                      })}
                     </SelectContent>
                   </Select>
                 ) : (
