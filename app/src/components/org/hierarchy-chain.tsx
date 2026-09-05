@@ -196,7 +196,15 @@ function Subtree({
               const onlyChild = visible.length === 1
               return (
                 <div key={child.positionId} className="flex flex-col items-center px-3">
-                  <div className="relative h-6 w-full" aria-hidden="true">
+                  {/*
+                    Pulled out over the cell's own padding. `w-full` is the CONTENT
+                    box, so without this the segment stops 0.75rem short on each
+                    side and the line breaks at every boundary between siblings.
+                  */}
+                  <div
+                    className="relative -mx-3 h-6 w-[calc(100%+1.5rem)]"
+                    aria-hidden="true"
+                  >
                     {!onlyChild ? (
                       <>
                         {/* left half — omitted on the first child */}
