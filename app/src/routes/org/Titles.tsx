@@ -1,8 +1,14 @@
 import { useState } from 'react'
 import { Tags } from 'lucide-react'
 import { toast } from 'sonner'
-import { useData } from '@/lib/data'
-import { TITLES, type Title } from '@/data/org-seed'
+import {
+  EMPTY_DRAFT,
+  useTitleWrites,
+  useTitles,
+  type TitleDraft,
+  type TitleRecord,
+  type TitleWriteResult,
+} from '@/data/titles'
 import { PageHeader } from '@/components/org/page-header'
 import { ListToolbar } from '@/components/org/list-toolbar'
 import { Panel, RecordName } from '@/components/org/panel'
@@ -22,25 +28,119 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
+/** The one place a record becomes an editable draft. */
+function toDraft(t: TitleRecord): TitleDraft {
+  const { titleId: _titleId, ...draft } = t
+  return draft
+}
+
 export default function Titles() {
-  const { data, loading } = useData<Title[]>('org-titles', 'seed', TITLES)
   const [search, setSearch] = useState('')
+  const { data, loading, error, refetch, total } = useTitles(search)
+  const { createTitle, updateTitle, pending } = useTitleWrites()
+
   const [createOpen, setCreateOpen] = useState(false)
-  const [selected, setSelected] = useState<Title | null>(null)
+  const [selected, setSelected] = useState<TitleRecord | null>(null)
+  const [draft, setDraft] = useState<TitleDraft>(EMPTY_DRAFT)
 
   const titles = data ?? []
-  const filtered = titles.filter((t) =>
-    `${t.title} ${t.description} ${t.category} ${t.function}`.toLowerCase().includes(search.toLowerCase()),
-  )
+  const set = (k: keyof TitleDraft) => (v: string) => setDraft((d) => ({ ...d, [k]: v }))
 
-  const columns: Column<Title>[] = [
-    { key: 'title', header: 'Title', width: '28%', cell: (t) => <RecordName name={t.title} sub={t.description} /> },
-    { key: 'category', header: 'Category', cell: (t) => <Badge variant="secondary" className="font-normal">{t.category}</Badge> },
+  // A refused write is a healthy 200 carrying a status — never an exception.
+  function handled(result: TitleWriteResult, onOk: () => void) {
+    if (result.success) {
+      toast.success(result.status === 'CREATED' ? 'Title created' : 'Title saved', {
+        description: result.message,
+      })
+      refetch()
+      onOk()
+      return
+    }
+    toast.error(
+      result.status === 'DUPLICATE_TITLE_CODE'
+        ? 'That title code is already taken'
+        : result.status === 'NOT_FOUND'
+          ? 'That title no longer exists'
+          : 'Could not save this title',
+      { description: result.message },
+    )
+  }
+
+  const columns: Column<TitleRecord>[] = [
+    { key: 'title', header: 'Title', width: '28%', cell: (t) => <RecordName name={t.name} sub={t.description} /> },
+    { key: 'category', header: 'Category', cell: (t) => (t.category ? <Badge variant="secondary" className="font-normal">{t.category}</Badge> : null) },
     { key: 'level', header: 'Level', cell: (t) => <span className="font-mono text-[13px] text-foreground">{t.level}</span> },
     { key: 'market', header: 'Market', cell: (t) => <span className="text-sm text-muted-foreground">{t.market}</span> },
     { key: 'function', header: 'Function', cell: (t) => <span className="text-sm text-muted-foreground">{t.function}</span> },
-    { key: 'pay', header: 'Pay Period', align: 'right', cell: (t) => <span className="text-sm text-muted-foreground">{t.payPeriodType}</span> },
+    { key: 'pay', header: 'Pay Period', align: 'right', cell: (t) => <span className="text-sm text-muted-foreground">{t.payPeriod}</span> },
   ]
+
+  const fields = (prefix: string) => (
+    <>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${prefix}-code`}>Title Code *</Label>
+        <Input
+          id={`${prefix}-code`}
+          required
+          placeholder="e.g. T-ENT-AE"
+          value={draft.titleCode}
+          onChange={(e) => set('titleCode')(e.target.value)}
+          data-test-id={`${prefix}-title-code`}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${prefix}-name`}>Title *</Label>
+        <Input
+          id={`${prefix}-name`}
+          required
+          placeholder="e.g. Enterprise AE"
+          value={draft.name}
+          onChange={(e) => set('name')(e.target.value)}
+          data-test-id={`${prefix}-title-name`}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${prefix}-desc`}>
+          Description <span className="text-muted-foreground/70">(optional)</span>
+        </Label>
+        <Textarea
+          id={`${prefix}-desc`}
+          placeholder="Short description"
+          value={draft.description}
+          onChange={(e) => set('description')(e.target.value)}
+          data-test-id={`${prefix}-title-desc`}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${prefix}-pay`}>Pay Period Type</Label>
+        <Input
+          id={`${prefix}-pay`}
+          placeholder="Monthly"
+          value={draft.payPeriod}
+          onChange={(e) => set('payPeriod')(e.target.value)}
+          data-test-id={`${prefix}-title-pay`}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-cat`}>Title Category</Label>
+          <Input id={`${prefix}-cat`} placeholder="Sales" value={draft.category} onChange={(e) => set('category')(e.target.value)} data-test-id={`${prefix}-title-category`} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-func`}>Function <span className="text-muted-foreground/70">(optional)</span></Label>
+          <Input id={`${prefix}-func`} placeholder="Field Sales" value={draft.function} onChange={(e) => set('function')(e.target.value)} data-test-id={`${prefix}-title-function`} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-level`}>Level <span className="text-muted-foreground/70">(optional)</span></Label>
+          <Input id={`${prefix}-level`} placeholder="IC-3" value={draft.level} onChange={(e) => set('level')(e.target.value)} data-test-id={`${prefix}-title-level`} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-market`}>Market <span className="text-muted-foreground/70">(optional)</span></Label>
+          <Input id={`${prefix}-market`} placeholder="Global" value={draft.market} onChange={(e) => set('market')(e.target.value)} data-test-id={`${prefix}-title-market`} />
+        </div>
+      </div>
+    </>
+  )
 
   return (
     <div data-test-id="titles-page">
@@ -48,28 +148,41 @@ export default function Titles() {
         eyebrow="Organization"
         title="Titles"
         subtitle="The catalog of job titles that classify positions and drive plan, rate-table, and pay-curve assignment."
-        meta={`${filtered.length} titles`}
+        meta={`${total ?? titles.length} titles`}
       />
       <ListToolbar
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search title, description…"
-        onCreate={() => setCreateOpen(true)}
+        onCreate={() => {
+          setDraft(EMPTY_DRAFT)
+          setCreateOpen(true)
+        }}
         createLabel="Create"
       />
       <Panel>
         <DataTable
           testId="titles-table"
           columns={columns}
-          rows={filtered}
-          rowId={(t) => t.id}
+          rows={titles}
+          rowId={(t) => t.titleId}
           loading={loading}
-          onRowClick={(t) => setSelected(t)}
+          // The sheet is a controlled form. The draft is seeded by the event that opens
+          // it, not by an effect on `selected` — deriving it in an effect re-renders for
+          // nothing and defaultValue would keep showing the first row ever opened.
+          onRowClick={(t) => {
+            setSelected(t)
+            setDraft(toDraft(t))
+          }}
           empty={
             <EmptyState
               icon={Tags}
-              title="No titles match"
-              description="Try a different search, or create a new title to classify your positions."
+              title={error ? 'Could not load titles' : 'No titles match'}
+              description={
+                error
+                  ? 'The titles service did not answer. Retry, or check the automation is deployed.'
+                  : 'Try a different search, or create a new title to classify your positions.'
+              }
             />
           }
         />
@@ -85,44 +198,16 @@ export default function Titles() {
               </SheetHeader>
               <form
                 className="flex-1 space-y-4 overflow-auto px-4"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault()
-                  toast.success('Title saved', { description: `${selected.title} updated.` })
-                  setSelected(null)
+                  handled(await updateTitle(selected.titleId, draft), () => setSelected(null))
                 }}
               >
-                <div className="space-y-1.5">
-                  <Label htmlFor="et-title">Title</Label>
-                  <Input id="et-title" defaultValue={selected.title} data-test-id="edit-title-name" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="et-desc">Description <span className="text-muted-foreground/70">(optional)</span></Label>
-                  <Textarea id="et-desc" defaultValue={selected.description} data-test-id="edit-title-desc" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="et-pay">Pay Period Type</Label>
-                  <Input id="et-pay" defaultValue={selected.payPeriodType} data-test-id="edit-title-pay" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="et-cat">Title Category</Label>
-                    <Input id="et-cat" defaultValue={selected.category} data-test-id="edit-title-category" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="et-func">Function <span className="text-muted-foreground/70">(optional)</span></Label>
-                    <Input id="et-func" defaultValue={selected.function} data-test-id="edit-title-function" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="et-level">Level <span className="text-muted-foreground/70">(optional)</span></Label>
-                    <Input id="et-level" defaultValue={selected.level} data-test-id="edit-title-level" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="et-market">Market <span className="text-muted-foreground/70">(optional)</span></Label>
-                    <Input id="et-market" defaultValue={selected.market} data-test-id="edit-title-market" />
-                  </div>
-                </div>
+                {fields('et')}
                 <SheetFooter className="px-0">
-                  <Button type="submit" data-test-id="edit-title-save">Save</Button>
+                  <Button type="submit" disabled={pending} data-test-id="edit-title-save">
+                    {pending ? 'Saving…' : 'Save'}
+                  </Button>
                   <Button type="button" variant="outline" onClick={() => setSelected(null)}>Cancel</Button>
                 </SheetFooter>
               </form>
@@ -139,40 +224,16 @@ export default function Titles() {
           </SheetHeader>
           <form
             className="flex-1 space-y-4 overflow-auto px-4"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault()
-              toast.success('Title created', { description: 'The new title is available for assignment.' })
-              setCreateOpen(false)
+              handled(await createTitle(draft), () => setCreateOpen(false))
             }}
           >
-            <div className="space-y-1.5">
-              <Label htmlFor="t-title">Title *</Label>
-              <Input id="t-title" required placeholder="e.g. Enterprise AE" data-test-id="field-title" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="t-desc">Description</Label>
-              <Textarea id="t-desc" placeholder="Short description" data-test-id="field-description" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="t-cat">Category</Label>
-                <Input id="t-cat" placeholder="Sales" data-test-id="field-category" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="t-level">Level</Label>
-                <Input id="t-level" placeholder="IC-3" data-test-id="field-level" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="t-market">Market</Label>
-                <Input id="t-market" placeholder="Global" data-test-id="field-market" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="t-func">Function</Label>
-                <Input id="t-func" placeholder="Field Sales" data-test-id="field-function" />
-              </div>
-            </div>
+            {fields('t')}
             <SheetFooter className="px-0">
-              <Button type="submit" data-test-id="create-title-submit">Save</Button>
+              <Button type="submit" disabled={pending} data-test-id="create-title-submit">
+                {pending ? 'Saving…' : 'Save'}
+              </Button>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             </SheetFooter>
           </form>
