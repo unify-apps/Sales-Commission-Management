@@ -28,6 +28,23 @@ export interface LivePosition {
   payeeName: string
   /** assignments covering the date: 0 VACANT, 1 OCCUPIED, 2+ CONFLICT */
   matchCount: number
+
+  // The window and split of the ONE assignment that resolved this row.
+  //
+  // OPTIONAL, not nullable: the runtime DROPS null properties from a response rather
+  // than serialising them, so "no answer" arrives as an ABSENT key. Measured against
+  // the deployed automation, not assumed — a suite case asserting `null` here failed
+  // with `missing`.
+  //
+  // Absent unless `occupancy` is 'OCCUPIED': a VACANT row has no assignment and a
+  // CONFLICT row has several, and naming one would be the guess the automation
+  // refuses to make. On an OCCUPIED row an absent `effectiveEnd` separately means
+  // OPEN-ENDED, still held — so absence reads two ways and `occupancy` is what
+  // separates them. Never render these without checking occupancy first, or a vacant
+  // position gets a confident "End of Time".
+  effectiveStart?: number
+  effectiveEnd?: number
+  allocationPct?: number
 }
 
 export interface LivePositionsQuery {

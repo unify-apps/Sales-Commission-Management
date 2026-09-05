@@ -24,3 +24,17 @@ export function formatDate(iso: string | null): string {
     day: 'numeric',
   }).format(new Date(iso))
 }
+
+/**
+ * Epoch milliseconds, as the ICM automations return effective dates. Separate from
+ * formatDate because that one takes an ISO string, and passing a number to it
+ * typechecks nowhere useful while silently working at run time.
+ */
+export function formatEpoch(ms: number | null | undefined): string {
+  if (ms == null) return '—'
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(ms))
+}
