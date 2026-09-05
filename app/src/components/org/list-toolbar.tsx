@@ -60,7 +60,11 @@ export function ListToolbar({
         variant="outline"
         size="sm"
         className="h-9"
-        onClick={() => toast('Export started', { description: 'Your list is being prepared for download.' })}
+        onClick={() =>
+          toast.success('Download started', {
+            description: 'Your list is being prepared and will download shortly.',
+          })
+        }
         data-test-id="list-toolbar-download"
       >
         <Download className="size-4" />
