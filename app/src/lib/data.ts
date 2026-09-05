@@ -6,6 +6,7 @@ import {
   andFilter,
   extractCallable,
   extractPage,
+  internals,
   pageInput,
   type CallableBinding,
   type CallableEnvelope,
@@ -26,13 +27,11 @@ export interface UseDataResult<T> {
 const NOOP = () => {}
 
 /** Config for `kind: 'callable'` — a deployed automation invoked by the app. */
-export interface CallableConfig<T> {
+export interface CallableConfig {
   /** The binding from `@/data/bindings`. Its `id` is a dataSource id, not the automation's. */
   binding: CallableBinding
   /** Per-call inputs for the automation. Sent under `parameters`. */
   parameters?: Record<string, unknown>
-  /** Rendered while the binding is unprovisioned, so the page never sits empty. */
-  fallback?: T
 }
 
 /** What a callable read hands back on top of the usual result. */
@@ -41,8 +40,10 @@ export interface UseCallableResult<T> extends UseDataResult<T> {
   status?: string
   /** Human-readable and safe to show. Present on every non-success outcome. */
   message?: string
-  /** True while the binding has no dataSource id and `fallback` is being rendered. */
-  isFallback: boolean
+  /** Rows that actually matched, where the automation distinguishes them from context. */
+  matched?: number
+  /** Whatever list of options the automation derived from the data it read. */
+  availableVersions?: Array<{ asOfDate: string; epoch: number }>
 }
 
 /** Config for `kind: 'storage'` — records read from a backend object. */
@@ -82,7 +83,7 @@ export function useData<T>(
 export function useData<T>(
   id: string,
   kind: 'callable',
-  config: CallableConfig<T>,
+  config: CallableConfig,
 ): UseCallableResult<T>
 export function useData<T>(id: string, kind: BindingKind, config: unknown): UseDataResult<T>
 export function useData<T>(
@@ -97,33 +98,34 @@ export function useData<T>(
     return useStorage<T>(config as StorageBinding)
   }
   if (kind === 'callable') {
-    return useCallable<T>(config as CallableConfig<T>)
+    return useCallable<T>(config as CallableConfig)
   }
   return { data: undefined, loading: false, error: undefined, refetch: NOOP }
 }
 
-function useCallable<T>(config: CallableConfig<T>): UseCallableResult<T> {
+function useCallable<T>(config: CallableConfig): UseCallableResult<T> {
   const bindingId = config?.binding?.id ?? ''
   const enabled = Boolean(bindingId)
 
   // The runtime wants the dataSource's whole stored input set, not just the bits
   // that vary — `version: '-1'` means "the deployed copy", and a request missing
   // any of these is refused rather than defaulted.
+  //
+  // `__internals__` rides INSIDE parameters, which is where the platform's own
+  // builder puts it. The call currently succeeds without it, but matching the
+  // request the platform makes of itself is worth more than relying on that
+  // staying true. It goes first so a caller can never shadow it.
   const inputs = useMemo(
     () => ({
       automationId: config?.binding?.automationId,
       runtimeConnections: {},
       version: '-1',
       synchronous: true,
-      parameters: config?.parameters ?? {},
+      parameters: { __internals__: internals(), ...(config?.parameters ?? {}) },
     }),
     [config?.binding?.automationId, config?.parameters],
   )
 
-  // No `internals` here on purpose. The callables runtime accepts the call on the
-  // strength of the dataSource id alone — verified both ways against prod — and the
-  // SDK's request type has no field for it, so sending one would need a cast that
-  // buys nothing.
   const query = useExecuteWorkflowNode(
     { id: bindingId, context: config?.binding?.context, inputs },
     { query: { enabled } },
@@ -134,16 +136,12 @@ function useCallable<T>(config: CallableConfig<T>): UseCallableResult<T> {
     [query.data],
   )
 
-  // No dataSource id yet: render the fallback rather than an empty screen. The
-  // automation is deployed and this turns on the moment the id is filled in.
+  // There is deliberately NO fallback. This app renders someone's reporting
+  // structure, and substituting invented rows for a call that did not answer is
+  // worse than showing nothing: the caller cannot tell the two apart. An
+  // unprovisioned binding reports "not loaded", same as any other failure.
   if (!enabled) {
-    return {
-      data: config?.fallback,
-      loading: false,
-      error: undefined,
-      refetch: NOOP,
-      isFallback: true,
-    }
+    return { data: undefined, loading: false, error: undefined, refetch: NOOP }
   }
 
   return {
@@ -155,7 +153,8 @@ function useCallable<T>(config: CallableConfig<T>): UseCallableResult<T> {
     hasMore: body?.hasMore,
     status: body?.status,
     message: body?.message,
-    isFallback: false,
+    matched: body?.matched,
+    availableVersions: body?.availableVersions,
   }
 }
 

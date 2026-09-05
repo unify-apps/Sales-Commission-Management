@@ -12,6 +12,13 @@ interface ListToolbarProps {
   createLabel?: string
   extra?: ReactNode
   showUpload?: boolean
+  /**
+   * The built-in Filter button is a placeholder that only toasts. A page that
+   * implements real filtering passes false and renders its own in `extra`, so the
+   * two never sit side by side. Defaults true, so pages without filters are
+   * unaffected.
+   */
+  showFilter?: boolean
 }
 
 export function ListToolbar({
@@ -22,6 +29,7 @@ export function ListToolbar({
   createLabel = 'Create',
   extra,
   showUpload = true,
+  showFilter = true,
 }: ListToolbarProps) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2" data-test-id="list-toolbar">
@@ -36,16 +44,18 @@ export function ListToolbar({
         />
       </div>
       {extra}
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-9"
-        onClick={() => toast('Filters', { description: 'Column & attribute filters open here.' })}
-        data-test-id="list-toolbar-filter"
-      >
-        <Filter className="size-4" />
-        Filter
-      </Button>
+      {showFilter ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          onClick={() => toast('Filters', { description: 'Column & attribute filters open here.' })}
+          data-test-id="list-toolbar-filter"
+        >
+          <Filter className="size-4" />
+          Filter
+        </Button>
+      ) : null}
       <Button
         variant="outline"
         size="sm"

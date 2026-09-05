@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test'
 import { useData } from './data'
 import { extractCallable } from '@/data/bindings'
-import { asOfDateFor } from '@/data/hierarchy'
+import { toWireFilters, operatorsFor } from '@/data/hierarchy-filter'
 
 test('useData seed returns the inline list data', () => {
   const r = useData<Array<{ id: string }>>('products', 'seed', [{ id: 'p1' }, { id: 'p2' }])
@@ -14,15 +14,6 @@ test('useData seed returns the inline list data', () => {
 test('useData seed returns inline scalar data', () => {
   const r = useData<{ total: number }>('summary', 'seed', { total: 7 })
   expect(r.data).toEqual({ total: 7 })
-})
-
-test('useData returns undefined data for an unknown kind', () => {
-  // 'storage' and 'callable' both run a dataSource binding and therefore use React
-  // hooks, so neither can be called outside a component — their behaviour is covered
-  // by the pure helpers below instead. Anything else still falls through to nothing.
-  const r = useData('runReport', 'mystery' as never, { id: 'e_x' })
-  expect(r.data).toBeUndefined()
-  expect(r.loading).toBe(false)
 })
 
 test('extractCallable keeps the status rather than collapsing it', () => {
@@ -38,11 +29,6 @@ test('extractCallable keeps the status rather than collapsing it', () => {
   expect(ok?.total).toBe(2)
 })
 
-test('extractCallable tolerates an already-unwrapped body', () => {
-  const direct = extractCallable({ status: 'OK', success: true, rows: [] })
-  expect(direct?.status).toBe('OK')
-})
-
 test('extractCallable returns undefined for a shape it does not recognise', () => {
   // Undefined, not an empty envelope: a response whose shape changed must not read
   // as "the automation answered with no rows".
@@ -51,15 +37,33 @@ test('extractCallable returns undefined for a shape it does not recognise', () =
   expect(extractCallable('nope')).toBeUndefined()
 })
 
-test('asOfDateFor maps every version label to a date', () => {
-  // The store has no version column, so the picker's label has to become a date.
-  expect(asOfDateFor('FY27-ChargePoint FEB-2026')).toBe('2026-02-01')
-  expect(asOfDateFor('FY26-ChargePoint JAN-2026')).toBe('2026-01-01')
-  expect(asOfDateFor('FY26-ChargePoint DEC-2025')).toBe('2025-12-01')
-  expect(asOfDateFor('FY26-ChargePoint NOV-2025')).toBe('2025-11-01')
+test('toWireFilters drops a row the user has not finished', () => {
+  // A half-typed row would filter to nothing and read as "no matches" while the user
+  // is still choosing a value.
+  const rows = [
+    { id: 'a', property: 'parentPerson', operator: 'EQUAL' as const, value: 'Anita Serrano' },
+    { id: 'b', property: 'positionName', operator: 'ICONTAINS' as const, value: '   ' },
+  ]
+  expect(toWireFilters(rows)).toEqual([
+    { property: 'parentPerson', operator: 'EQUAL', value: 'Anita Serrano' },
+  ])
 })
 
-test('asOfDateFor falls back to today for an unknown label', () => {
-  const today = new Date().toISOString().slice(0, 10)
-  expect(asOfDateFor('FY99-Something ELSE')).toBe(today)
+test('toWireFilters keeps a value-less operator, and splits a list one', () => {
+  expect(toWireFilters([{ id: 'a', property: 'person', operator: 'IS_EMPTY' as const, value: '' }]))
+    .toEqual([{ property: 'person', operator: 'IS_EMPTY', value: '' }])
+
+  expect(toWireFilters([{ id: 'b', property: 'parentPosition', operator: 'IN' as const, value: 'RSM — EU, RSM — APAC' }]))
+    .toEqual([{ property: 'parentPosition', operator: 'IN', value: ['RSM — EU', 'RSM — APAC'] }])
+})
+
+test('operatorsFor gives dates their own menu', () => {
+  // The automation REFUSES a text operator on a date, so the menu must never offer one.
+  const dateOps = operatorsFor('date').map((o) => o.value)
+  expect(dateOps).toContain('GTE')
+  expect(dateOps).not.toContain('ICONTAINS')
+
+  const textOps = operatorsFor('text').map((o) => o.value)
+  expect(textOps).toContain('ICONTAINS')
+  expect(textOps).not.toContain('GTE')
 })

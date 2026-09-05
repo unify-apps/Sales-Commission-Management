@@ -1,59 +1,115 @@
 import { useMemo } from 'react'
 import { useData } from '@/lib/data'
-import { LIST_POSITION_HIERARCHY, type PositionHierarchyRow } from './bindings'
-import { HIERARCHY, type HierarchyRow } from './org-seed'
+import {
+  LIST_POSITION_HIERARCHY,
+  type HierarchyVersion,
+  type PositionHierarchyRow,
+} from './bindings'
+import { toWireFilters, type FilterRow } from './hierarchy-filter'
 
-// The version picker is a label; the store has no version column. PositionHierarchy
-// carries only effectiveStart/effectiveEnd, so a "version" is really a DATE and the
-// callable is asked for the relationships in force on it. Each label from
-// HIERARCHY_VERSIONS maps to the first day of the month it names.
-//
-// The 2025 versions predate every stored relationship (the earliest starts
-// 2026-01-01), so they legitimately answer with nothing — that is history being
-// empty, not a failed read, and the page's own empty state says so.
-const VERSION_AS_OF: Record<string, string> = {
-  'FY27-ChargePoint FEB-2026': '2026-02-01',
-  'FY26-ChargePoint JAN-2026': '2026-01-01',
-  'FY26-ChargePoint DEC-2025': '2025-12-01',
-  'FY26-ChargePoint NOV-2025': '2025-11-01',
+/** Everything the page can ask the automation for. */
+export interface HierarchyQuery {
+  /** YYYY-MM-DD. Empty means the automation's own default, which is today. */
+  asOfDate: string
+  search: string
+  filters: FilterRow[]
+  rootOperator: 'AND' | 'OR'
+  /**
+   * A flat list wants only the rows that matched. A tree also needs each match's
+   * ancestors, or it fragments into orphans — so the view says which it is.
+   */
+  includeAncestors: boolean
+  limit: number
+  offset: number
 }
 
-export function asOfDateFor(versionName: string): string {
-  return VERSION_AS_OF[versionName] ?? new Date().toISOString().slice(0, 10)
-}
+export const DEFAULT_PAGE_SIZE = 10
 
-// The callable answers with '' for anything it could not resolve — a vacant seat, a
-// contested date, a payee record that no longer exists. The page renders null as
-// "Open seat" and '—', so the empty strings become null exactly once, here, rather
-// than every component having to know the convention.
-const orNull = (value: string | undefined) => (value ? value : null)
-
-function toHierarchyRow(row: PositionHierarchyRow): HierarchyRow {
+export function emptyQuery(asOfDate = ''): HierarchyQuery {
   return {
-    id: row.id,
-    versionName: row.versionName,
-    effectiveStart: row.effectiveStart,
-    positionName: row.positionName,
-    person: orNull(row.person),
-    parentPosition: orNull(row.parentPosition),
-    parentPerson: orNull(row.parentPerson),
+    asOfDate, search: '', filters: [], rootOperator: 'AND',
+    includeAncestors: false, limit: DEFAULT_PAGE_SIZE, offset: 0,
   }
 }
 
 /**
- * The reporting structure for one version, from `ICM | List Position Hierarchy`.
- *
- * The callable returns the root as a row of its own even though the store cannot
- * hold one — PositionHierarchy requires a parent, so the top of the tree has no
- * record. Without it every second-level manager would come back as a separate root
- * and the tree would lose its head.
+ * A short label for one version. The date is what the callable wants; this is only
+ * what the picker shows.
  */
-export function useHierarchy(versionName: string) {
-  const asOfDate = asOfDateFor(versionName)
+export function versionLabel(asOfDate: string) {
+  const parsed = new Date(`${asOfDate}T00:00:00Z`)
+  // Loud rather than wrong: an unparseable value must not render as a plausible month.
+  if (Number.isNaN(parsed.getTime())) return asOfDate
+  const month = parsed.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase()
+  return `${month}-${parsed.getUTCFullYear()}`
+}
+
+// The callable answers with '' for anything it could not resolve — a vacant seat, a
+// contested date, a payee record that no longer exists. The page renders null as
+// "Open seat" and '—', so the empty strings become null exactly once, here.
+const orNull = (value: string | undefined) => (value ? value : null)
+
+export interface HierarchyTableRow {
+  id: string
+  effectiveStart: string
+  positionName: string
+  positionCode: string
+  person: string | null
+  parentPosition: string | null
+  parentPerson: string | null
+  isRoot: boolean
+  /** False when the row is present only because a match sits beneath it. */
+  isMatch: boolean
+  depth: number
+}
+
+function toHierarchyRow(row: PositionHierarchyRow): HierarchyTableRow {
+  return {
+    id: row.id,
+    effectiveStart: row.effectiveStart,
+    positionName: row.positionName,
+    positionCode: row.positionCode,
+    person: orNull(row.person),
+    parentPosition: orNull(row.parentPosition),
+    parentPerson: orNull(row.parentPerson),
+    isRoot: row.isRoot,
+    isMatch: row.isMatch !== false,
+    depth: row.depth ?? 0,
+  }
+}
+
+/**
+ * The reporting structure for one as-of date, from `ICM | List Position Hierarchy`.
+ *
+ * Search, filters and paging all happen in the callable — the page sends the query
+ * and renders the answer. Two consequences worth knowing:
+ *
+ * Rows come back with `isMatch: false` when they are only present because a match
+ * sits beneath them. Filtering without those ancestors would orphan every match whose
+ * manager did not match, and the tree would lose whole branches.
+ *
+ * `total` is the count AFTER filtering and BEFORE paging, so pagination reports the
+ * real number rather than the size of the page it just received.
+ */
+export function useHierarchy(query: HierarchyQuery) {
+  // Only complete rows are sent. A half-typed row would filter to nothing and read
+  // as "no matches" while the user is still choosing a value.
+  const wireFilters = useMemo(() => toWireFilters(query.filters), [query.filters])
 
   const parameters = useMemo(
-    () => ({ asOfDate, versionName, search: '', limit: '', offset: '' }),
-    [asOfDate, versionName],
+    () => ({
+      asOfDate: query.asOfDate,
+      search: query.search,
+      filters: wireFilters.length > 0 ? JSON.stringify(wireFilters) : '',
+      rootOperator: query.rootOperator,
+      includeAncestors: String(query.includeAncestors),
+      limit: String(query.limit),
+      offset: String(query.offset),
+    }),
+    [
+      query.asOfDate, query.search, wireFilters, query.rootOperator,
+      query.includeAncestors, query.limit, query.offset,
+    ],
   )
 
   const result = useData<PositionHierarchyRow[]>('org-hierarchy', 'callable', {
@@ -63,30 +119,37 @@ export function useHierarchy(versionName: string) {
 
   // Three outcomes, not two. A read that FAILED is not a read that came back empty,
   // and on a comp system the difference matters: this structure decides who is paid
-  // on whose deals, so a page that quietly renders invented reporting lines is worse
-  // than one that admits it could not load. No `status` once loading has finished
-  // means the automation never answered at all.
-  const failed = !result.isFallback && (Boolean(result.error) || (!result.loading && !result.status))
+  // on whose deals, so a page that renders invented reporting lines — or claims a
+  // version has none — is worse than one that admits it could not load. No `status`
+  // once loading has finished means the automation never answered at all.
+  const failed = Boolean(result.error) || (!result.loading && !result.status)
 
-  const rows = useMemo<HierarchyRow[]>(() => {
-    // The seed is for local development, where the binding has no dataSource id yet.
-    // It is never a stand-in for a failed call against a real backend.
-    if (result.isFallback) return HIERARCHY
-    if (failed) return []
-    return (result.data ?? []).map(toHierarchyRow)
-  }, [result.isFallback, failed, result.data])
+  // INVALID_INPUT arrives as a healthy 200 — a refused filter is not a failed read,
+  // and it carries a message naming the row the automation would not accept.
+  const refused = result.status === 'INVALID_INPUT'
+
+  const rows = useMemo<HierarchyTableRow[]>(
+    () => (failed || refused ? [] : (result.data ?? []).map(toHierarchyRow)),
+    [failed, refused, result.data],
+  )
+
+  const versions = useMemo<HierarchyVersion[]>(
+    () => result.availableVersions ?? [],
+    [result.availableVersions],
+  )
 
   return {
     rows,
+    versions,
     loading: result.loading,
-    error: result.error,
-    /** The read did not produce an answer. Distinct from an answer of zero rows. */
     failed,
-    // A transport 200 means the automation ran, not that it worked. INVALID_INPUT
-    // arrives as a healthy 200, so the caller branches on this and not on `error`.
+    refused,
+    total: result.total ?? 0,
+    /** Rows that actually matched, excluding ancestors kept for context. */
+    matched: result.matched ?? 0,
+    hasMore: result.hasMore ?? false,
     status: result.status,
     message: result.message,
-    isFallback: result.isFallback,
     refetch: result.refetch,
   }
 }

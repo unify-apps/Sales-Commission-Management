@@ -195,7 +195,11 @@ export const LIST_POSITION_HIERARCHY: CallableBinding = {
     resourceVersion: 1575,
   },
   automationId: '6a9be08e57dcee3b72fe372c',
-  overridable: ['asOfDate', 'versionName', 'search', 'limit', 'offset'],
+  overridable: [
+    'asOfDate', 'versionName', 'search',
+    'parentPosition', 'parentPerson', 'effectiveFrom', 'effectiveTo',
+    'limit', 'offset',
+  ],
 }
 
 /**
@@ -220,7 +224,23 @@ export interface PositionHierarchyRow {
   parentPositionId: string
   parentPosition: string
   parentPerson: string
+  /** Synthesised: the top of the tree has no stored row of its own. */
   isRoot: boolean
+  /**
+   * False for a row returned only because a match sits beneath it. Filtering
+   * without these would orphan every match whose manager did not match, and the
+   * tree — which joins rows by parent name — would lose whole branches.
+   */
+  isMatch: boolean
+  /** Levels below the root. 0 is the root. */
+  depth: number
+}
+
+/** One date on which the reporting structure changed. Drives the version picker. */
+export interface HierarchyVersion {
+  /** YYYY-MM-DD */
+  asOfDate: string
+  epoch: number
 }
 
 /** The envelope every ICM callable answers with. Branch on `status`, never the HTTP code. */
@@ -228,8 +248,14 @@ export interface CallableEnvelope<T> {
   status: string
   success: boolean
   message?: string
+  /** Rows after filtering — the full count, not the page. */
   total?: number
+  /** How many rows actually matched, excluding ancestors kept for context. */
+  matched?: number
   hasMore?: boolean
+  offset?: number
+  limit?: number
+  availableVersions?: HierarchyVersion[]
   rows?: T[]
 }
 

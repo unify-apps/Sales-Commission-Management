@@ -2,10 +2,16 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { initials } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { HierarchyRow } from '@/data/org-seed'
+/** Only what the chart draws. Kept minimal so the chart does not depend on the
+ *  shape of whatever produced the rows. */
+export interface OrgChartRow {
+  id: string
+  positionName: string
+  person: string | null
+}
 
 export interface OrgNode {
-  row: HierarchyRow
+  row: OrgChartRow
   children: OrgNode[]
 }
 
@@ -24,7 +30,7 @@ function NodeCard({
   collapsed,
   onToggle,
 }: {
-  row: HierarchyRow
+  row: OrgChartRow
   isRoot: boolean
   childCount: number
   collapsed: boolean
